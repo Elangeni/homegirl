@@ -5,7 +5,7 @@ from homegirl.settings import Settings
 
 
 def main() -> None:
-    """Start the fullscreen dashboard."""
+    """Start the fullscreen ambient display."""
     app = HomegirlApp(Settings.from_environment())
     try:
         app.run()

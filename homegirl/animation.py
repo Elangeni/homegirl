@@ -45,9 +45,6 @@ class AmbientBackground:
         soft = pygame.transform.smoothscale(soft, size)
         surface.blit(soft, (0, 0))
 
-        self._draw_vignette(surface, theme)
-        self._draw_ambient_veil(surface, theme)
-
     def _draw_blob(self, layer: pygame.Surface, blob: BlobSpec) -> None:
         width, height = layer.get_size()
         orbit = self._time * blob.speed * math.tau
@@ -106,24 +103,6 @@ class AmbientBackground:
 
         self._gradient_cache[key] = gradient
         return gradient
-
-    def _draw_vignette(self, surface: pygame.Surface, theme: Theme) -> None:
-        width, height = surface.get_size()
-        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-        edge = round(max(width, height) * 0.08)
-        pygame.draw.rect(overlay, (*theme.vignette[:3], theme.vignette[3]), (0, 0, width, edge))
-        pygame.draw.rect(overlay, (*theme.vignette[:3], theme.vignette[3]), (0, height - edge, width, edge))
-        pygame.draw.rect(overlay, (*theme.vignette[:3], theme.vignette[3]), (0, 0, edge, height))
-        pygame.draw.rect(overlay, (*theme.vignette[:3], theme.vignette[3]), (width - edge, 0, edge, height))
-        surface.blit(overlay, (0, 0))
-
-    def _draw_ambient_veil(self, surface: pygame.Surface, theme: Theme) -> None:
-        """Apply a barely visible full-screen wash for text legibility."""
-        width, height = surface.get_size()
-        veil = pygame.Surface((width, height), pygame.SRCALPHA)
-        veil.fill(theme.ambient_veil)
-        surface.blit(veil, (0, 0))
-
 
 def _mix(start: tuple[int, int, int], end: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
     """Blend two RGB colors."""

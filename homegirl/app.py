@@ -10,7 +10,7 @@ from homegirl.greeting import get_daypart, get_greeting
 from homegirl.national_day import NationalDayClient
 from homegirl.settings import Settings
 from homegirl.theme import get_theme
-from homegirl.ui import DashboardUI, DashboardViewModel
+from homegirl.ui import AmbientUI, AmbientViewModel
 
 
 class HomegirlApp:
@@ -37,7 +37,7 @@ class HomegirlApp:
 
             clock = pygame.time.Clock()
             background = AmbientBackground(self._settings.animation_quality_scale)
-            ui = DashboardUI()
+            ui = AmbientUI()
             running = True
 
             while running:
@@ -53,7 +53,7 @@ class HomegirlApp:
                 national_day_state = self._national_day.get_state(moment.date())
                 ui.draw(
                     screen,
-                    DashboardViewModel(
+                    AmbientViewModel(
                         greeting=get_greeting(moment),
                         user_name=self._settings.user_name,
                         time_text=format_time(moment),

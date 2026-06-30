@@ -38,7 +38,7 @@ The National Day client tries `https://api.nationaldaysapi.com/v1/date` first, t
 
 ## Ambient Background
 
-The background is generated in code with large translucent moving blobs, smooth gradients, and a soft center readability glow. The app switches palettes based on local time:
+The background is generated in code with large translucent moving blobs and smooth gradients. The text floats directly on top of the wallpaper without cards, panels, borders, or containers. The app switches palettes based on local time:
 
 - Morning: 05:00-11:59
 - Afternoon: 12:00-16:59
@@ -53,7 +53,5 @@ The background is generated in code with large translucent moving blobs, smooth 
 - `homegirl/greeting.py`: greeting and daypart logic
 - `homegirl/national_day.py`: non-blocking API fetch and daily cache
 - `homegirl/theme.py`: time-of-day palettes and animation colors
-- `homegirl/ui.py`: ambient text rendering and future widget contract
+- `homegirl/ui.py`: ambient floating text rendering
 - `homegirl/settings.py`: runtime configuration
-
-The UI module includes a small `Widget` protocol so later features like weather, calendar, todos, Home Assistant, music controls, and notifications can be added without rewriting the application loop.
