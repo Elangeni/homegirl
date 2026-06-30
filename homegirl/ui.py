@@ -1,4 +1,4 @@
-"""Composable ambient display UI primitives."""
+"""Ambient floating typography."""
 
 from __future__ import annotations
 
@@ -32,17 +32,17 @@ class AmbientUI:
         self._small_font: pygame.font.Font
 
     def draw(self, surface: pygame.Surface, model: AmbientViewModel, theme: Theme) -> None:
-        """Draw all ambient text centered on the display."""
+        """Draw ambient text with a left-aligned art-frame layout."""
         self._ensure_fonts(surface)
 
         lines: list[tuple[str, pygame.font.Font, tuple[int, int, int], int, int]] = [
-            (model.greeting, self._greeting_font, theme.text_secondary, 230, 30),
-            (f"Hello, {model.user_name}", self._name_font, theme.text_primary, 238, 36),
-            (model.time_text, self._time_font, theme.text_primary, 236, 30),
-            (model.date_text, self._date_font, theme.text_secondary, 220, 28),
+            (model.greeting, self._greeting_font, theme.text_secondary, 196, self._spacing(42)),
+            (f"Hello, {model.user_name}", self._name_font, theme.text_primary, 244, self._spacing(62)),
+            (model.time_text, self._time_font, theme.time_color, 230, self._spacing(52)),
+            (model.date_text, self._date_font, theme.text_secondary, 218, self._spacing(28)),
         ]
         if model.national_day:
-            lines.append((f"Happy {model.national_day}", self._small_font, theme.text_secondary, 205, 0))
+            lines.append((f"Happy {model.national_day}", self._small_font, theme.text_muted, 140, 0))
 
         rendered = [
             (_render_text(font, text, color, alpha), spacing)
@@ -50,12 +50,13 @@ class AmbientUI:
         ]
         content_height = sum(image.get_height() for image, _ in rendered)
         content_height += sum(spacing for _, spacing in rendered[:-1])
-        y = (surface.get_height() - content_height) // 2
-        center_x = surface.get_width() // 2
+        margin_x = max(116, round(surface.get_width() * 0.109))
+        margin_y = max(64, round(surface.get_height() * 0.11))
+        y = max(margin_y, (surface.get_height() - content_height) // 2)
 
         for image, spacing in rendered:
-            rect = image.get_rect(center=(center_x, y + image.get_height() // 2))
-            _draw_text_shadow(surface, image, rect)
+            rect = image.get_rect(topleft=(margin_x, y))
+            surface.blit(image, rect)
             y += image.get_height() + spacing
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
@@ -63,23 +64,22 @@ class AmbientUI:
         if self._fonts_ready:
             return
 
-        base = min(surface.get_width(), surface.get_height())
-        self._greeting_font = _font(max(24, base // 30))
-        self._name_font = _font(max(54, base // 10), bold=True)
-        self._time_font = _font(max(42, base // 13), bold=True)
-        self._date_font = _font(max(24, base // 30))
-        self._small_font = _font(max(20, base // 36))
+        scale = max(0.82, min(surface.get_height() / 720, surface.get_width() / 1280))
+        self._greeting_font = _font(round(29 * scale))
+        self._name_font = _font(round(77 * scale), bold=True)
+        self._time_font = _font(round(72 * scale))
+        self._date_font = _font(round(34 * scale))
+        self._small_font = _font(round(24 * scale))
         self._fonts_ready = True
 
+    def _spacing(self, value: int) -> int:
+        return round(value * self._scale)
 
-def _draw_text_shadow(surface: pygame.Surface, image: pygame.Surface, rect: pygame.Rect) -> None:
-    """Draw a small text-only shadow for readability over bright wallpaper."""
-    shadow = pygame.Surface(image.get_size(), pygame.SRCALPHA)
-    shadow.fill((0, 0, 0, 0))
-    shadow.blit(image, (0, 0))
-    shadow.fill((0, 0, 0, 88), special_flags=pygame.BLEND_RGBA_MULT)
-    surface.blit(shadow, rect.move(1, 2))
-    surface.blit(image, rect)
+    @property
+    def _scale(self) -> float:
+        if not self._fonts_ready:
+            return 1.0
+        return self._name_font.get_height() / 98
 
 
 def _render_text(
@@ -89,12 +89,12 @@ def _render_text(
     alpha: int,
 ) -> pygame.Surface:
     """Render text with gentle opacity so it belongs to the wallpaper."""
-    image = font.render(text, True, color).convert_alpha()
+    image = font.render(text, True, color)
     image.set_alpha(alpha)
     return image
 
 
 def _font(size: int, *, bold: bool = False) -> pygame.font.Font:
     """Choose a clean system font with broad platform fallback."""
-    candidates = ("SF Pro Display", "Helvetica Neue", "Avenir Next", "DejaVu Sans", "Arial")
+    candidates = ("Inter", "SF Pro Display", "Manrope", "IBM Plex Sans", "Noto Sans", "Helvetica Neue", "Arial")
     return pygame.font.SysFont(candidates, size, bold=bold)
