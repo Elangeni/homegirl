@@ -7,7 +7,10 @@ from homegirl.settings import Settings
 def main() -> None:
     """Start the fullscreen dashboard."""
     app = HomegirlApp(Settings.from_environment())
-    app.run()
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
