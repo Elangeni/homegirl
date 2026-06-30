@@ -1,4 +1,4 @@
-"""Homegirl ambient dashboard package."""
+"""Homegirl ambient smart-display package."""
 
 __all__ = ["__version__"]
 

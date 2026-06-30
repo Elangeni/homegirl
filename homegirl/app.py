@@ -14,7 +14,7 @@ from homegirl.ui import DashboardUI, DashboardViewModel
 
 
 class HomegirlApp:
-    """Fullscreen ambient dashboard application."""
+    """Fullscreen ambient smart-display application."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings

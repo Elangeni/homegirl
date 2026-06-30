@@ -46,7 +46,7 @@ class AmbientBackground:
         surface.blit(soft, (0, 0))
 
         self._draw_vignette(surface, theme)
-        self._draw_center_readability_panel(surface, theme)
+        self._draw_ambient_veil(surface, theme)
 
     def _draw_blob(self, layer: pygame.Surface, blob: BlobSpec) -> None:
         width, height = layer.get_size()
@@ -117,18 +117,12 @@ class AmbientBackground:
         pygame.draw.rect(overlay, (*theme.vignette[:3], theme.vignette[3]), (width - edge, 0, edge, height))
         surface.blit(overlay, (0, 0))
 
-    def _draw_center_readability_panel(self, surface: pygame.Surface, theme: Theme) -> None:
+    def _draw_ambient_veil(self, surface: pygame.Surface, theme: Theme) -> None:
+        """Apply a barely visible full-screen wash for text legibility."""
         width, height = surface.get_size()
-        panel = pygame.Surface((width, height), pygame.SRCALPHA)
-        rect = pygame.Rect(0, 0, round(width * 0.62), round(height * 0.64))
-        rect.center = (width // 2, height // 2)
-
-        for inset in range(0, 44, 4):
-            current = rect.inflate(inset * 2, inset * 2)
-            alpha = max(0, theme.panel_alpha - inset)
-            pygame.draw.ellipse(panel, (0, 0, 0, alpha), current)
-
-        surface.blit(panel, (0, 0))
+        veil = pygame.Surface((width, height), pygame.SRCALPHA)
+        veil.fill(theme.ambient_veil)
+        surface.blit(veil, (0, 0))
 
 
 def _mix(start: tuple[int, int, int], end: tuple[int, int, int], amount: float) -> tuple[int, int, int]:

@@ -1,6 +1,6 @@
 # Homegirl MVP
 
-Homegirl is a Raspberry Pi-powered ambient wall display. This MVP is a clean pygame-ce shell that opens directly into a fullscreen dashboard with a generated lava-lamp ambient background, greeting, clock, date, and today's National Day when the API is available.
+Homegirl is a Raspberry Pi-powered ambient wall display. This MVP is a clean pygame-ce shell that opens directly into a fullscreen smart-display screen with a generated lava-lamp ambient background, greeting, clock, date, and today's National Day when the API is available.
 
 ## Setup
 
@@ -53,7 +53,7 @@ The background is generated in code with large translucent moving blobs, smooth 
 - `homegirl/greeting.py`: greeting and daypart logic
 - `homegirl/national_day.py`: non-blocking API fetch and daily cache
 - `homegirl/theme.py`: time-of-day palettes and animation colors
-- `homegirl/ui.py`: dashboard rendering and future widget contract
+- `homegirl/ui.py`: ambient text rendering and future widget contract
 - `homegirl/settings.py`: runtime configuration
 
 The UI module includes a small `Widget` protocol so later features like weather, calendar, todos, Home Assistant, music controls, and notifications can be added without rewriting the application loop.
