@@ -6,8 +6,23 @@ from dataclasses import dataclass
 
 import pygame
 
+from pathlib import Path
+
 from homegirl.theme import Theme
 
+
+FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+FONTS = {
+    100: "ElmsSans-Thin.ttf",
+    200: "ElmsSans-ExtraLight.ttf",
+    300: "ElmsSans-Light.ttf",
+    400: "ElmsSans-Regular.ttf",
+    500: "ElmsSans-Medium.ttf",
+    600: "ElmsSans-SemiBold.ttf",
+    700: "ElmsSans-Bold.ttf",
+    800: "ElmsSans-ExtraBold.ttf",
+    900: "ElmsSans-Black.ttf",
+}
 
 @dataclass(frozen=True)
 class AmbientViewModel:
@@ -25,28 +40,23 @@ class AmbientUI:
 
     def __init__(self) -> None:
         self._fonts_ready = False
-        self._greeting_font: pygame.font.Font
-        self._name_font: pygame.font.Font
-        self._time_font: pygame.font.Font
-        self._date_font: pygame.font.Font
-        self._small_font: pygame.font.Font
 
     def draw(self, surface: pygame.Surface, model: AmbientViewModel, theme: Theme) -> None:
         """Draw ambient text with a left-aligned art-frame layout."""
         self._ensure_fonts(surface)
 
-        lines: list[tuple[str, pygame.font.Font, tuple[int, int, int], int, int]] = [
-            (model.greeting, self._greeting_font, theme.text_secondary, 196, self._spacing(42)),
-            (f"Hello, {model.user_name}", self._name_font, theme.text_primary, 244, self._spacing(62)),
-            (model.time_text, self._time_font, theme.time_color, 230, self._spacing(52)),
-            (model.date_text, self._date_font, theme.text_secondary, 218, self._spacing(28)),
+        lines: list[tuple[str, pygame.font.Font, tuple[int, int, int], int]] = [
+            (model.greeting, self._greeting_font, theme.text_secondary, self._spacing(42)),
+            (f"Hello, {model.user_name}", self._name_font, theme.text_primary, self._spacing(62)),
+            (model.time_text, self._time_font, theme.time_color, self._spacing(52)),
+            (model.date_text, self._date_font, theme.text_secondary, self._spacing(28)),
         ]
         if model.national_day:
-            lines.append((f"Happy {model.national_day}", self._small_font, theme.text_muted, 140, 0))
+            lines.append((f"Happy {model.national_day}", self._small_font, theme.text_muted, 0))
 
         rendered = [
-            (_render_text(font, text, color, alpha), spacing)
-            for text, font, color, alpha, spacing in lines
+            (_render_text(font, text, color), spacing)
+            for text, font, color, spacing in lines
         ]
         content_height = sum(image.get_height() for image, _ in rendered)
         content_height += sum(spacing for _, spacing in rendered[:-1])
@@ -60,41 +70,31 @@ class AmbientUI:
             y += image.get_height() + spacing
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
-        """Size fonts from display height once pygame knows the screen size."""
         if self._fonts_ready:
             return
 
-        scale = max(0.82, min(surface.get_height() / 720, surface.get_width() / 1280))
-        self._greeting_font = _font(round(29 * scale))
-        self._name_font = _font(round(77 * scale), bold=True)
-        self._time_font = _font(round(72 * scale))
-        self._date_font = _font(round(34 * scale))
-        self._small_font = _font(round(24 * scale))
-        self._fonts_ready = True
+        scale = max(
+            0.82,
+            min(surface.get_height() / 720, surface.get_width() / 1280),
+        )
 
+        self._greeting_font = _font(round(29 * scale), 200)
+        self._name_font     = _font(round(77 * scale), 700)
+        self._time_font     = _font(round(72 * scale), 400)
+        self._date_font     = _font(round(34 * scale), 400)
+        self._small_font    = _font(round(24 * scale), 300)
+
+        self._fonts_ready = True
     def _spacing(self, value: int) -> int:
         return round(value * self._scale)
-
-    @property
-    def _scale(self) -> float:
-        if not self._fonts_ready:
-            return 1.0
-        return self._name_font.get_height() / 98
-
 
 def _render_text(
     font: pygame.font.Font,
     text: str,
     color: tuple[int, int, int],
-    alpha: int,
 ) -> pygame.Surface:
-    """Render text with gentle opacity so it belongs to the wallpaper."""
-    image = font.render(text, True, color)
-    image.set_alpha(alpha)
-    return image
+    """Render crisp ambient text."""
+    return font.render(text, True, color)
 
-
-def _font(size: int, *, bold: bool = False) -> pygame.font.Font:
-    """Choose a clean system font with broad platform fallback."""
-    candidates = ("Inter", "SF Pro Display", "Manrope", "IBM Plex Sans", "Noto Sans", "Helvetica Neue", "Arial")
-    return pygame.font.SysFont(candidates, size, bold=bold)
+def _font(size: int, weight: int = 400) -> pygame.font.Font:
+    return pygame.font.Font(FONT_DIR / FONTS[weight], size)
