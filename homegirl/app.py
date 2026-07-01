@@ -8,9 +8,14 @@ from homegirl.animation import AmbientBackground
 from homegirl.clock import format_date, format_time, now_local
 from homegirl.greeting import get_daypart, get_greeting
 from homegirl.national_day import NationalDayClient
+from homegirl.navigation import Screen, WakeController
 from homegirl.settings import Settings
 from homegirl.theme import get_theme
-from homegirl.ui import AmbientUI, AmbientViewModel
+from homegirl.ui import AmbientUI, AmbientViewModel, AppUI, AppViewModel
+
+
+APP_IDLE_TIMEOUT_SECONDS = 30.0
+APP_LABELS = ("a", "b", "c", "d")
 
 
 class HomegirlApp:
@@ -37,40 +42,57 @@ class HomegirlApp:
 
             clock = pygame.time.Clock()
             background = AmbientBackground(self._settings.animation_quality_scale)
-            ui = AmbientUI()
+            ambient_ui = AmbientUI()
+            app_ui = AppUI()
+            wake_controller = WakeController(APP_IDLE_TIMEOUT_SECONDS)
             running = True
 
             while running:
                 delta_seconds = clock.tick(self._settings.frames_per_second) / 1000.0
-                running = self._handle_events()
+                running, had_activity = self._handle_events()
+                active_screen = wake_controller.update(delta_seconds, had_activity)
 
                 moment = now_local()
                 daypart = get_daypart(moment)
                 theme = get_theme(daypart)
-                background.update(delta_seconds)
-                background.draw(screen, theme)
 
-                national_day_state = self._national_day.get_state(moment.date())
-                ui.draw(
-                    screen,
-                    AmbientViewModel(
-                        greeting=get_greeting(moment),
-                        user_name=self._settings.user_name,
-                        time_text=format_time(moment),
-                        date_text=format_date(moment),
-                        national_day=national_day_state.name,
-                    ),
-                    theme,
-                )
+                if active_screen == Screen.AMBIENT:
+                    background.update(delta_seconds)
+                    background.draw(screen, theme)
+
+                    national_day_state = self._national_day.get_state(moment.date())
+                    ambient_ui.draw(
+                        screen,
+                        AmbientViewModel(
+                            greeting=get_greeting(moment),
+                            user_name=self._settings.user_name,
+                            time_text=format_time(moment),
+                            date_text=format_date(moment),
+                            national_day=national_day_state.name,
+                        ),
+                        theme,
+                    )
+                else:
+                    app_ui.draw(
+                        screen,
+                        AppViewModel(time_text=format_time(moment), labels=APP_LABELS),
+                    )
                 pygame.display.flip()
         finally:
             pygame.quit()
 
-    def _handle_events(self) -> bool:
-        """Process quit events while keeping the render loop responsive."""
+    def _handle_events(self) -> tuple[bool, bool]:
+        """Process quit events and report user activity."""
+        had_activity = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return False
+                return False, had_activity
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return False
-        return True
+                return False, had_activity
+            if event.type in {
+                pygame.FINGERDOWN,
+                pygame.MOUSEBUTTONDOWN,
+                pygame.KEYDOWN,
+            }:
+                had_activity = True
+        return True, had_activity

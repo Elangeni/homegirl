@@ -35,6 +35,14 @@ class AmbientViewModel:
     national_day: str | None
 
 
+@dataclass(frozen=True)
+class AppViewModel:
+    """Data required to render the unlocked app frame."""
+
+    time_text: str
+    labels: tuple[str, str, str, str]
+
+
 class AmbientUI:
     """Render text that floats over the ambient wallpaper."""
 
@@ -88,6 +96,94 @@ class AmbientUI:
         self._date_font = _font(round(34 * self._scale), 400)
         self._small_font = _font(round(24 * self._scale), 300)
 
+        self._fonts_ready = True
+
+    def _spacing(self, value: int) -> int:
+        return round(value * self._scale)
+
+
+class AppUI:
+    """Render the first unlocked app screen."""
+
+    def __init__(self) -> None:
+        self._fonts_ready = False
+        self._scale = 1.0
+
+    def draw(self, surface: pygame.Surface, model: AppViewModel) -> None:
+        """Draw a simple status bar and 2-by-2 app grid."""
+        self._ensure_fonts(surface)
+
+        surface.fill((242, 240, 234))
+        width, height = surface.get_size()
+        margin = self._spacing(36)
+        status_height = self._spacing(78)
+        line_color = (43, 43, 39)
+        text_color = (34, 34, 30)
+
+        time_image = _render_text(self._time_font, model.time_text, text_color)
+        time_rect = time_image.get_rect(
+            midleft=(margin, status_height // 2),
+        )
+        surface.blit(time_image, time_rect)
+
+        pygame.draw.line(
+            surface,
+            line_color,
+            (0, status_height),
+            (width, status_height),
+            max(1, self._spacing(2)),
+        )
+
+        grid_top = status_height + self._spacing(34)
+        grid_rect = pygame.Rect(
+            margin,
+            grid_top,
+            width - (margin * 2),
+            height - grid_top - margin,
+        )
+        gap = self._spacing(18)
+        cell_width = (grid_rect.width - gap) // 2
+        cell_height = (grid_rect.height - gap) // 2
+
+        for index, label in enumerate(model.labels):
+            column = index % 2
+            row = index // 2
+            rect = pygame.Rect(
+                grid_rect.left + column * (cell_width + gap),
+                grid_rect.top + row * (cell_height + gap),
+                cell_width,
+                cell_height,
+            )
+            self._draw_tile(surface, rect, label)
+
+    def _draw_tile(self, surface: pygame.Surface, rect: pygame.Rect, label: str) -> None:
+        fill_color = (255, 255, 251)
+        border_color = (52, 52, 46)
+        text_color = (33, 33, 29)
+
+        pygame.draw.rect(surface, fill_color, rect, border_radius=self._spacing(8))
+        pygame.draw.rect(
+            surface,
+            border_color,
+            rect,
+            width=max(1, self._spacing(2)),
+            border_radius=self._spacing(8),
+        )
+
+        label_image = _render_text(self._tile_font, label, text_color)
+        label_rect = label_image.get_rect(center=rect.center)
+        surface.blit(label_image, label_rect)
+
+    def _ensure_fonts(self, surface: pygame.Surface) -> None:
+        if self._fonts_ready:
+            return
+
+        self._scale = max(
+            0.82,
+            min(surface.get_height() / 720, surface.get_width() / 1280),
+        )
+        self._time_font = _font(round(30 * self._scale), 500)
+        self._tile_font = _font(round(56 * self._scale), 600)
         self._fonts_ready = True
 
     def _spacing(self, value: int) -> int:
