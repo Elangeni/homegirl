@@ -54,7 +54,7 @@ class AmbientUI:
         ]
 
         if model.national_day:
-            lines.append((f"Happy {model.national_day}", self._small_font, theme.text_muted, 0))
+            lines.append((f"Happy {model.national_day}", self._date_font, theme.text_muted, 0))
 
         rendered = [
             (_render_text(font, text, color), spacing)
