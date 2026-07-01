@@ -7,8 +7,6 @@ from datetime import date
 import threading
 from typing import Any
 
-import requests
-
 
 @dataclass
 class NationalDayState:
@@ -22,8 +20,8 @@ class NationalDayState:
 class NationalDayClient:
     """Fetch and cache the current National Day without blocking rendering."""
 
-    def __init__(self, api_url: str, timeout_seconds: float) -> None:
-        self._api_url = api_url
+    def __init__(self, api_urls: str | tuple[str, ...], timeout_seconds: float) -> None:
+        self._api_urls = (api_urls,) if isinstance(api_urls, str) else api_urls
         self._timeout_seconds = timeout_seconds
         self._state = NationalDayState()
         self._lock = threading.Lock()
@@ -53,22 +51,28 @@ class NationalDayClient:
 
     def _fetch_for_day(self, today: date) -> None:
         name: str | None = None
-        try:
-            response = requests.get(self._api_url, timeout=self._timeout_seconds)
-            response.raise_for_status()
-            payload = response.json()
-            name = self._extract_name(payload)
-        except requests.RequestException:
-            name = None
-        except ValueError:
-            name = None
-        finally:
-            with self._lock:
-                self._state = NationalDayState(
-                    name=name,
-                    fetched_for=today,
-                    is_fetching=False,
-                )
+        import requests
+
+        for api_url in self._api_urls:
+            try:
+                response = requests.get(api_url, timeout=self._timeout_seconds)
+                response.raise_for_status()
+                payload = response.json()
+                name = self._extract_name(payload)
+            except requests.RequestException:
+                name = None
+            except ValueError:
+                name = None
+
+            if name:
+                break
+
+        with self._lock:
+            self._state = NationalDayState(
+                name=name,
+                fetched_for=today,
+                is_fetching=False,
+            )
 
     def _extract_name(self, payload: Any) -> str | None:
         """Extract a holiday name from common National Day API shapes."""

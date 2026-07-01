@@ -14,10 +14,11 @@ class Settings:
     user_name: str = "Elangeni"
     app_title: str = "Homegirl"
     frames_per_second: int = 30
-    background_frame_seconds: float = 0.12
+    animation_quality_scale: float = 0.45
     base_dir: Path = Path(__file__).resolve().parent.parent
     national_day_timeout_seconds: float = 4.0
-    national_day_api_url: str = "https://www.checkiday.com/api/3/?d=today"
+    national_day_api_url: str = "https://api.nationaldaysapi.com/v1/date"
+    national_day_fallback_api_url: str = "https://www.checkiday.com/api/3/?d=today"
     fullscreen: bool = True
 
     @property
@@ -34,6 +35,10 @@ class Settings:
             national_day_api_url=os.getenv(
                 "HOMEGIRL_NATIONAL_DAY_API_URL",
                 cls.national_day_api_url,
+            ),
+            national_day_fallback_api_url=os.getenv(
+                "HOMEGIRL_NATIONAL_DAY_FALLBACK_API_URL",
+                cls.national_day_fallback_api_url,
             ),
             fullscreen=fullscreen_value not in {"0", "false", "no", "off"},
         )

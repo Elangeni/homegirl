@@ -1,4 +1,4 @@
-"""Disk-backed animated backgrounds."""
+"""Static ambient wallpaper renderer."""
 
 from __future__ import annotations
 
@@ -6,95 +6,56 @@ from pathlib import Path
 
 import pygame
 
-from homegirl.greeting import Daypart
+from homegirl.theme import Theme
 
 
-class FrameAnimation:
-    """Loop through a sequence of PNG frames at a stable cadence."""
+class AmbientBackground:
+    """Draw the static wallpaper for the active time-of-day theme."""
 
-    def __init__(self, frames: list[pygame.Surface], seconds_per_frame: float) -> None:
-        self._frames = frames
-        self._seconds_per_frame = seconds_per_frame
-        self._elapsed = 0.0
-        self._index = 0
-
-    @property
-    def current_frame(self) -> pygame.Surface | None:
-        """Return the active frame, or None if no frames were loaded."""
-        if not self._frames:
-            return None
-        return self._frames[self._index]
+    def __init__(self, quality_scale: float = 0.5) -> None:
+        self._assets_dir = Path(__file__).resolve().parent.parent / "assets" / "backgrounds"
+        self._source_cache: dict[str, pygame.Surface] = {}
+        self._scaled_cache: dict[tuple[str, tuple[int, int]], pygame.Surface] = {}
 
     def update(self, delta_seconds: float) -> None:
-        """Advance the animation without coupling it to clock updates."""
-        if len(self._frames) <= 1:
-            return
+        """Keep the existing app loop contract; static wallpapers do not animate."""
 
-        self._elapsed += delta_seconds
-        while self._elapsed >= self._seconds_per_frame:
-            self._elapsed -= self._seconds_per_frame
-            self._index = (self._index + 1) % len(self._frames)
+    def draw(self, surface: pygame.Surface, theme: Theme) -> None:
+        """Draw the theme wallpaper scaled and cropped to fill the screen."""
+        image = self._load(theme.background_image)
+        wallpaper = self._scale_to_cover(image, surface.get_size(), theme.background_image)
+        rect = wallpaper.get_rect(center=surface.get_rect().center)
+        surface.blit(wallpaper, rect)
 
+    def _load(self, filename: str) -> pygame.Surface:
+        cached = self._source_cache.get(filename)
+        if cached is not None:
+            return cached
 
-class BackgroundManager:
-    """Load and switch daypart-specific PNG frame animations."""
+        path = self._assets_dir / filename
+        image = pygame.image.load(path)
+        try:
+            image = image.convert()
+        except pygame.error:
+            pass
 
-    def __init__(self, assets_dir: Path, seconds_per_frame: float) -> None:
-        self._assets_dir = assets_dir
-        self._seconds_per_frame = seconds_per_frame
-        self._animations: dict[Daypart, FrameAnimation] = {}
-        self._active_daypart: Daypart | None = None
+        self._source_cache[filename] = image
+        return image
 
-    def set_daypart(self, daypart: Daypart) -> None:
-        """Switch to the frame folder matching the current daypart."""
-        if self._active_daypart == daypart:
-            return
-        if daypart not in self._animations:
-            self._animations[daypart] = self._load_animation(daypart)
-        self._active_daypart = daypart
+    def _scale_to_cover(
+        self,
+        image: pygame.Surface,
+        target_size: tuple[int, int],
+        cache_key: str,
+    ) -> pygame.Surface:
+        cached = self._scaled_cache.get((cache_key, target_size))
+        if cached is not None:
+            return cached
 
-    def update(self, delta_seconds: float) -> None:
-        """Advance the active background animation."""
-        animation = self._active_animation
-        if animation:
-            animation.update(delta_seconds)
-
-    def draw(self, surface: pygame.Surface) -> None:
-        """Draw the active frame scaled and cropped to fill the display."""
-        frame = self._active_animation.current_frame if self._active_animation else None
-        if frame is None:
-            surface.fill((12, 15, 24))
-            return
-
-        scaled = _scale_to_cover(frame, surface.get_size())
-        rect = scaled.get_rect(center=surface.get_rect().center)
-        surface.blit(scaled, rect)
-
-        # A subtle overlay keeps text readable across bright animation frames.
-        veil = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        veil.fill((0, 0, 0, 92))
-        surface.blit(veil, (0, 0))
-
-    @property
-    def _active_animation(self) -> FrameAnimation | None:
-        if self._active_daypart is None:
-            return None
-        return self._animations.get(self._active_daypart)
-
-    def _load_animation(self, daypart: Daypart) -> FrameAnimation:
-        folder = self._assets_dir / daypart.value
-        frames = [
-            pygame.image.load(path).convert()
-            for path in sorted(folder.glob("*.png"))
-            if path.is_file()
-        ]
-        return FrameAnimation(frames, self._seconds_per_frame)
-
-
-def _scale_to_cover(surface: pygame.Surface, target_size: tuple[int, int]) -> pygame.Surface:
-    """Scale a surface so it covers the target without distortion."""
-    target_width, target_height = target_size
-    width, height = surface.get_size()
-    scale = max(target_width / width, target_height / height)
-    scaled_size = (round(width * scale), round(height * scale))
-    return pygame.transform.smoothscale(surface, scaled_size)
+        target_width, target_height = target_size
+        width, height = image.get_size()
+        scale = max(target_width / width, target_height / height)
+        scaled_size = (round(width * scale), round(height * scale))
+        wallpaper = pygame.transform.smoothscale(image, scaled_size)
+        self._scaled_cache[(cache_key, target_size)] = wallpaper
+        return wallpaper
