@@ -2,7 +2,7 @@
 
 Homegirl is a Raspberry Pi-powered ambient wall display. This MVP is a clean pygame-ce shell that opens directly into a fullscreen smart-display screen with a static ambient wallpaper, greeting, clock, date, and today's National Day when the API is available.
 
-Tap the ambient screen to wake Homegirl into the app screen. The first app screen shows a top time bar and a 2-by-2 grid labeled `a`, `b`, `c`, and `d`; after 30 seconds without activity, it returns to the ambient screen.
+Tap the ambient screen to wake Homegirl into the app screen with a smooth crossfade. The first app screen shows a top time bar and a 2-by-2 grid labeled `a`, `b`, `c`, and `d`; after 30 seconds without activity, it crossfades back to the ambient screen.
 
 ## Setup
 
@@ -58,3 +58,4 @@ The background is loaded from static PNG artwork in `assets/backgrounds/`. The t
 - `homegirl/theme.py`: time-of-day palettes and animation colors
 - `homegirl/ui.py`: ambient and app screen rendering
 - `homegirl/settings.py`: runtime configuration
+- `homegirl/transition.py`: screen transition timing and easing
