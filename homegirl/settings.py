@@ -19,6 +19,8 @@ class Settings:
     national_day_timeout_seconds: float = 4.0
     national_day_api_url: str = "https://api.nationaldaysapi.com/v1/date"
     national_day_fallback_api_url: str = "https://www.checkiday.com/api/3/?d=today"
+    openweather_api_key: str | None = None
+    openweather_timeout_seconds: float = 4.0
     fullscreen: bool = True
 
     @property
@@ -40,5 +42,6 @@ class Settings:
                 "HOMEGIRL_NATIONAL_DAY_FALLBACK_API_URL",
                 cls.national_day_fallback_api_url,
             ),
+            openweather_api_key=os.getenv("OPENWEATHER_API_KEY"),
             fullscreen=fullscreen_value not in {"0", "false", "no", "off"},
         )
