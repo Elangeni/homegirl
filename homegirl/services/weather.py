@@ -1,4 +1,4 @@
-"""OpenWeather One Call API integration with in-memory caching."""
+"""OpenWeather Current Weather API integration with in-memory caching."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from homegirl.models.weather import WeatherData
 
 LAT = 37.7749
 LON = -122.4194
-OPENWEATHER_ONE_CALL_URL = "https://api.openweathermap.org/data/3.0/onecall"
+OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
 WEATHER_CACHE_SECONDS = 30 * 60
 
 logger = logging.getLogger(__name__)
@@ -91,13 +91,12 @@ class WeatherService:
 
     def _fetch_weather(self, now: datetime) -> WeatherData:
         response = requests.get(
-            OPENWEATHER_ONE_CALL_URL,
+            OPENWEATHER_CURRENT_URL,
             params={
                 "lat": LAT,
                 "lon": LON,
                 "appid": self._api_key,
                 "units": "imperial",
-                "exclude": "minutely,hourly,alerts",
             },
             timeout=self._timeout_seconds,
         )
@@ -109,21 +108,20 @@ class WeatherService:
         if not isinstance(payload, dict):
             raise ValueError("weather payload is not an object")
 
-        current = _dict_value(payload, "current")
-        daily = _list_value(payload, "daily")
-        today = _dict_item(daily, 0)
-        temperature = _dict_value(today, "temp")
-        weather_items = _list_value(current, "weather")
+        main = _dict_value(payload, "main")
+        wind = _dict_value(payload, "wind")
+        weather_items = _list_value(payload, "weather")
         first_condition = _dict_item(weather_items, 0)
 
         return WeatherData(
-            current_temp=_float_value(current, "temp"),
+            current_temp=_float_value(main, "temp"),
+            feels_like=_float_value(main, "feels_like"),
+            condition_main=_string_value(first_condition, "main"),
             condition=_string_value(first_condition, "description"),
-            high_temp=_float_value(temperature, "max"),
-            low_temp=_float_value(temperature, "min"),
-            rain_chance=_rain_chance(today),
-            humidity=_int_value(current, "humidity"),
-            wind_speed=_float_value(current, "wind_speed"),
+            high_temp=_float_value(main, "temp_max"),
+            low_temp=_float_value(main, "temp_min"),
+            humidity=_int_value(main, "humidity"),
+            wind_speed=_float_value(wind, "speed"),
             last_updated=now,
         )
 
@@ -178,12 +176,3 @@ def _string_value(payload: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise TypeError(f"{key} is not text")
     return value.strip()
-
-
-def _rain_chance(payload: dict[str, Any]) -> float | None:
-    value = payload.get("pop")
-    if value is None:
-        return None
-    if not isinstance(value, (int, float)):
-        raise TypeError("pop is not a number")
-    return float(value) * 100.0

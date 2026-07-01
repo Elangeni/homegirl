@@ -11,6 +11,8 @@ class WeatherData:
     """Weather values the UI and future features can safely consume."""
 
     current_temp: float | None = None
+    feels_like: float | None = None
+    condition_main: str | None = None
     condition: str | None = None
     high_temp: float | None = None
     low_temp: float | None = None

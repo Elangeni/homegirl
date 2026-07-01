@@ -36,11 +36,11 @@ Environment variables:
 - `HOMEGIRL_FULLSCREEN`: set to `0` for a resizable desktop window. Defaults to fullscreen.
 - `HOMEGIRL_NATIONAL_DAY_API_URL`: override the National Day JSON API URL.
 - `HOMEGIRL_NATIONAL_DAY_FALLBACK_API_URL`: override the fallback JSON API URL.
-- `OPENWEATHER_API_KEY`: OpenWeather One Call API 3.0 key. If missing, weather is omitted.
+- `OPENWEATHER_API_KEY`: OpenWeather API key. If missing, weather is omitted.
 
 The National Day client tries `https://api.nationaldaysapi.com/v1/date` first, then a quiet fallback endpoint if needed. It fetches in a background thread, caches the result in memory, and refreshes only once per local calendar day. If the requests fail or the responses cannot be parsed, the line is hidden.
 
-Weather uses OpenWeather One Call API 3.0 with hardcoded San Francisco coordinates for now (`37.7749`, `-122.4194`) and imperial units. Weather refreshes at most every 30 minutes, uses cached data between refreshes, and falls back to stale cached data if a refresh fails. If no API key or usable cache exists, weather UI stays quiet.
+Weather uses OpenWeather Current Weather API with hardcoded San Francisco coordinates for now (`37.7749`, `-122.4194`) and imperial units. Weather refreshes at most every 30 minutes, uses cached data between refreshes, and falls back to stale cached data if a refresh fails. If no API key or usable cache exists, weather UI stays quiet.
 
 ## Ambient Background
 
