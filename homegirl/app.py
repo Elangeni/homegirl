@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pygame
 
 from homegirl.animation import AmbientBackground
 from homegirl.clock import format_date, format_time, now_local
 from homegirl.greeting import get_daypart, get_greeting
+from homegirl.models.weather import WeatherData
 from homegirl.national_day import NationalDayClient
 from homegirl.navigation import Screen, WakeController
 from homegirl.settings import Settings
+from homegirl.services.weather import WeatherService
 from homegirl.theme import Theme, get_theme
 from homegirl.transition import ScreenTransition
 from homegirl.ui import AmbientUI, AmbientViewModel, AppUI, AppViewModel
@@ -28,6 +32,10 @@ class HomegirlApp:
         self._national_day = NationalDayClient(
             (settings.national_day_api_url, settings.national_day_fallback_api_url),
             settings.national_day_timeout_seconds,
+        )
+        self._weather = WeatherService(
+            settings.openweather_api_key,
+            settings.openweather_timeout_seconds,
         )
 
     def run(self) -> None:
@@ -59,6 +67,7 @@ class HomegirlApp:
                 moment = now_local()
                 daypart = get_daypart(moment)
                 theme = get_theme(daypart)
+                weather = self._weather.get_weather(moment)
 
                 background.update(delta_seconds)
                 if screen_transition.is_active:
@@ -69,6 +78,7 @@ class HomegirlApp:
                         screen_transition.source_screen,
                         moment,
                         theme,
+                        weather,
                         background,
                         ambient_ui,
                         app_ui,
@@ -78,6 +88,7 @@ class HomegirlApp:
                         screen_transition.target_screen,
                         moment,
                         theme,
+                        weather,
                         background,
                         ambient_ui,
                         app_ui,
@@ -91,6 +102,7 @@ class HomegirlApp:
                         active_screen,
                         moment,
                         theme,
+                        weather,
                         background,
                         ambient_ui,
                         app_ui,
@@ -103,8 +115,9 @@ class HomegirlApp:
         self,
         surface: pygame.Surface,
         active_screen: Screen,
-        moment,
+        moment: datetime,
         theme: Theme,
+        weather: WeatherData,
         background: AmbientBackground,
         ambient_ui: AmbientUI,
         app_ui: AppUI,
@@ -122,6 +135,7 @@ class HomegirlApp:
                     time_text=format_time(moment),
                     date_text=format_date(moment),
                     national_day=national_day_state.name,
+                    weather=weather,
                 ),
                 theme,
             )
@@ -129,7 +143,7 @@ class HomegirlApp:
 
         app_ui.draw(
             surface,
-            AppViewModel(time_text=format_time(moment), labels=APP_LABELS),
+            AppViewModel(time_text=format_time(moment), labels=APP_LABELS, weather=weather),
         )
 
     def _handle_events(self) -> tuple[bool, bool]:

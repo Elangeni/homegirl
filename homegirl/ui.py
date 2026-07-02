@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pygame
 
+from homegirl.models.weather import WeatherData
 from homegirl.theme import Theme
 
 
@@ -33,6 +34,7 @@ class AmbientViewModel:
     time_text: str
     date_text: str
     national_day: str | None
+    weather: WeatherData
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ class AppViewModel:
 
     time_text: str
     labels: tuple[str, str, str, str]
+    weather: WeatherData
 
 
 class AmbientUI:
@@ -80,6 +83,24 @@ class AmbientUI:
             rect = image.get_rect(topleft=(margin_x, y))
             surface.blit(image, rect)
             y += image.get_height() + spacing
+
+        self._draw_weather(surface, model.weather, theme)
+
+    def _draw_weather(
+        self,
+        surface: pygame.Surface,
+        weather: WeatherData,
+        theme: Theme,
+    ) -> None:
+        if not weather.is_available:
+            return
+
+        text = _format_temp(weather.current_temp)
+        image = _render_text(self._small_font, text, theme.text_secondary)
+        margin_x = max(32, round(surface.get_width() * 0.044))
+        margin_y = max(28, round(surface.get_height() * 0.056))
+        rect = image.get_rect(topright=(surface.get_width() - margin_x, margin_y))
+        surface.blit(image, rect)
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
         if self._fonts_ready:
@@ -154,12 +175,66 @@ class AppUI:
                 cell_width,
                 cell_height,
             )
-            self._draw_tile(surface, rect, label)
+            if index == 0:
+                self._draw_weather_tile(surface, rect, model.weather)
+            else:
+                self._draw_tile(surface, rect, label)
+
+    def _draw_weather_tile(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        weather: WeatherData,
+    ) -> None:
+        self._draw_tile_frame(surface, rect)
+
+        title_color = (68, 68, 60)
+        text_color = (33, 33, 29)
+        muted_color = (88, 88, 78)
+        left = rect.left + self._spacing(28)
+        top = rect.top + self._spacing(24)
+
+        title = _render_text(self._card_title_font, "Weather", title_color)
+        surface.blit(title, title.get_rect(topleft=(left, top)))
+
+        if not weather.is_available:
+            unavailable = _render_text(self._card_body_font, "Unavailable", muted_color)
+            surface.blit(
+                unavailable,
+                unavailable.get_rect(topleft=(left, top + self._spacing(58))),
+            )
+            return
+
+        temp = _render_text(self._weather_temp_font, _format_temp(weather.current_temp), text_color)
+        surface.blit(temp, temp.get_rect(topleft=(left, top + self._spacing(46))))
+
+        if weather.condition:
+            condition = _render_text(
+                self._card_body_font,
+                weather.condition.title(),
+                muted_color,
+            )
+            surface.blit(condition, condition.get_rect(topleft=(left, top + self._spacing(116))))
+
+        if weather.high_temp is not None and weather.low_temp is not None:
+            high_low = _render_text(
+                self._card_detail_font,
+                f"High {_format_temp(weather.high_temp)}  Low {_format_temp(weather.low_temp)}",
+                muted_color,
+            )
+            surface.blit(high_low, high_low.get_rect(topleft=(left, top + self._spacing(158))))
 
     def _draw_tile(self, surface: pygame.Surface, rect: pygame.Rect, label: str) -> None:
+        self._draw_tile_frame(surface, rect)
+        text_color = (33, 33, 29)
+
+        label_image = _render_text(self._tile_font, label, text_color)
+        label_rect = label_image.get_rect(center=rect.center)
+        surface.blit(label_image, label_rect)
+
+    def _draw_tile_frame(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
         fill_color = (255, 255, 251)
         border_color = (52, 52, 46)
-        text_color = (33, 33, 29)
 
         pygame.draw.rect(surface, fill_color, rect, border_radius=self._spacing(8))
         pygame.draw.rect(
@@ -169,10 +244,6 @@ class AppUI:
             width=max(1, self._spacing(2)),
             border_radius=self._spacing(8),
         )
-
-        label_image = _render_text(self._tile_font, label, text_color)
-        label_rect = label_image.get_rect(center=rect.center)
-        surface.blit(label_image, label_rect)
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
         if self._fonts_ready:
@@ -184,6 +255,10 @@ class AppUI:
         )
         self._time_font = _font(round(30 * self._scale), 500)
         self._tile_font = _font(round(56 * self._scale), 600)
+        self._card_title_font = _font(round(26 * self._scale), 600)
+        self._weather_temp_font = _font(round(58 * self._scale), 600)
+        self._card_body_font = _font(round(30 * self._scale), 400)
+        self._card_detail_font = _font(round(24 * self._scale), 400)
         self._fonts_ready = True
 
     def _spacing(self, value: int) -> int:
@@ -201,3 +276,9 @@ def _render_text(
 
 def _font(size: int, weight: int = 400) -> pygame.font.Font:
     return pygame.font.Font(FONT_DIR / FONTS[weight], size)
+
+
+def _format_temp(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{round(value)}°"
