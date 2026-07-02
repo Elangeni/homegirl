@@ -13,10 +13,18 @@ from homegirl.models.schedule import ScheduleData
 from homegirl.models.weather import WeatherData
 from homegirl.national_day import NationalDayClient
 from homegirl.navigation import Screen, WakeController
-from homegirl.schedule_insight import get_schedule_summary
-from homegirl.settings import Settings
+from homegirl.reflection import REFLECTION_PROMPTS
+from homegirl.schedule_insight import (
+    get_free_time_gap,
+    get_free_time_hint,
+    get_schedule_headline,
+    get_schedule_summary,
+    timed_events_today,
+)
 from homegirl.services.calendar import CalendarService
 from homegirl.services.weather import WeatherService
+from homegirl.settings import Settings
+from homegirl.suggestion import SuggestionState
 from homegirl.theme import Theme, get_theme
 from homegirl.transition import ScreenTransition
 from homegirl.ui import (
@@ -24,6 +32,12 @@ from homegirl.ui import (
     AmbientViewModel,
     AppUI,
     AppViewModel,
+    CalendarUI,
+    CalendarViewModel,
+    CelebrationUI,
+    ReflectionUI,
+    ReflectionViewModel,
+    SuggestionUI,
     WeatherUI,
     WeatherViewModel,
 )
@@ -31,8 +45,12 @@ from homegirl.weather_insight import get_advice, get_headline
 
 
 APP_IDLE_TIMEOUT_SECONDS = 30.0
-APP_LABELS = ("a", "b", "c", "d")
 SCREEN_TRANSITION_SECONDS = 0.45
+
+# The celebration screen has no completion-detection engine behind it yet; this
+# is placeholder copy shown when a developer presses "C" to preview the screen.
+CELEBRATION_DEMO_HEADLINE = "Finished the sewing project."
+CELEBRATION_DEMO_SUBTEXT = "Nice one."
 
 
 class HomegirlApp:
@@ -71,16 +89,30 @@ class HomegirlApp:
             clock = pygame.time.Clock()
             background = AmbientBackground(self._settings.animation_quality_scale)
             ambient_ui = AmbientUI()
+            suggestion_ui = SuggestionUI()
+            suggestion_state = SuggestionState()
             app_ui = AppUI()
             weather_ui = WeatherUI()
+            calendar_ui = CalendarUI()
+            celebration_ui = CelebrationUI()
+            reflection_ui = ReflectionUI()
             wake_controller = WakeController(APP_IDLE_TIMEOUT_SECONDS)
             screen_transition = ScreenTransition(Screen.AMBIENT, SCREEN_TRANSITION_SECONDS)
             running = True
 
             while running:
                 delta_seconds = clock.tick(self._settings.frames_per_second) / 1000.0
-                running, had_activity, tap_pos = self._handle_events(window_size)
-                self._handle_tap(tap_pos, wake_controller, app_ui, weather_ui)
+                running, had_activity, tap_pos = self._handle_events(window_size, wake_controller)
+                self._handle_tap(
+                    tap_pos,
+                    wake_controller,
+                    suggestion_state,
+                    suggestion_ui,
+                    app_ui,
+                    weather_ui,
+                    calendar_ui,
+                    reflection_ui,
+                )
                 active_screen = wake_controller.update(delta_seconds, had_activity)
                 screen_transition.update(active_screen, delta_seconds)
 
@@ -91,6 +123,16 @@ class HomegirlApp:
                 schedule = self._calendar.get_schedule(moment)
 
                 background.update(delta_seconds)
+                ui_bundle = (
+                    ambient_ui,
+                    suggestion_ui,
+                    suggestion_state,
+                    app_ui,
+                    weather_ui,
+                    calendar_ui,
+                    celebration_ui,
+                    reflection_ui,
+                )
                 if screen_transition.is_active:
                     source_surface = pygame.Surface(screen.get_size())
                     target_surface = pygame.Surface(screen.get_size())
@@ -102,9 +144,7 @@ class HomegirlApp:
                         weather,
                         schedule,
                         background,
-                        ambient_ui,
-                        app_ui,
-                        weather_ui,
+                        *ui_bundle,
                     )
                     self._draw_screen(
                         target_surface,
@@ -114,9 +154,7 @@ class HomegirlApp:
                         weather,
                         schedule,
                         background,
-                        ambient_ui,
-                        app_ui,
-                        weather_ui,
+                        *ui_bundle,
                     )
                     screen.blit(source_surface, (0, 0))
                     target_surface.set_alpha(screen_transition.target_alpha)
@@ -130,9 +168,7 @@ class HomegirlApp:
                         weather,
                         schedule,
                         background,
-                        ambient_ui,
-                        app_ui,
-                        weather_ui,
+                        *ui_bundle,
                     )
                 pygame.display.flip()
         finally:
@@ -148,8 +184,13 @@ class HomegirlApp:
         schedule: ScheduleData,
         background: AmbientBackground,
         ambient_ui: AmbientUI,
+        suggestion_ui: SuggestionUI,
+        suggestion_state: SuggestionState,
         app_ui: AppUI,
         weather_ui: WeatherUI,
+        calendar_ui: CalendarUI,
+        celebration_ui: CelebrationUI,
+        reflection_ui: ReflectionUI,
     ) -> None:
         """Draw one top-level screen onto a surface."""
         if active_screen == Screen.AMBIENT:
@@ -168,6 +209,10 @@ class HomegirlApp:
                 ),
                 theme,
             )
+
+            suggestion = suggestion_state.active
+            if suggestion is not None:
+                suggestion_ui.draw(surface, suggestion)
             return
 
         if active_screen == Screen.WEATHER:
@@ -180,6 +225,39 @@ class HomegirlApp:
                     headline=get_headline(weather),
                     advice=get_advice(weather, daypart),
                 ),
+                background,
+            )
+            return
+
+        if active_screen == Screen.CALENDAR:
+            calendar_ui.draw(
+                surface,
+                CalendarViewModel(
+                    time_text=format_time(moment),
+                    headline=get_schedule_headline(schedule, moment),
+                    free_hint=get_free_time_hint(schedule, moment),
+                    events=timed_events_today(schedule),
+                    free_gap=get_free_time_gap(schedule, moment),
+                ),
+                background,
+            )
+            return
+
+        if active_screen == Screen.CELEBRATION:
+            celebration_ui.draw(
+                surface,
+                CELEBRATION_DEMO_HEADLINE,
+                CELEBRATION_DEMO_SUBTEXT,
+                format_date(moment),
+                background,
+            )
+            return
+
+        if active_screen == Screen.REFLECTION:
+            reflection_ui.draw(
+                surface,
+                ReflectionViewModel(time_text=_reflection_time_text(moment), prompts=REFLECTION_PROMPTS),
+                background,
             )
             return
 
@@ -187,36 +265,89 @@ class HomegirlApp:
             surface,
             AppViewModel(
                 time_text=format_time(moment),
-                labels=APP_LABELS,
-                weather=weather,
-                schedule_summary=get_schedule_summary(schedule, moment),
+                date_text=format_date(moment),
+                today_text=get_schedule_headline(schedule, moment) or "Unavailable",
+                weather_text=_home_weather_text(weather),
+                calendar_text=(
+                    get_free_time_hint(schedule, moment)
+                    or get_schedule_summary(schedule, moment)
+                    or "Unavailable"
+                ),
             ),
+            background,
         )
 
     def _handle_tap(
         self,
         tap_pos: tuple[int, int] | None,
         wake_controller: WakeController,
+        suggestion_state: SuggestionState,
+        suggestion_ui: SuggestionUI,
         app_ui: AppUI,
         weather_ui: WeatherUI,
+        calendar_ui: CalendarUI,
+        reflection_ui: ReflectionUI,
     ) -> None:
-        """Navigate between the app grid and weather screens on tap."""
+        """Navigate between screens based on where the current screen was tapped."""
         if tap_pos is None:
             return
 
         current_screen = wake_controller.screen
-        if current_screen == Screen.APP and app_ui.weather_tile_rect is not None:
-            if app_ui.weather_tile_rect.collidepoint(tap_pos):
+
+        if current_screen == Screen.AMBIENT:
+            suggestion = suggestion_state.active
+            if suggestion is not None:
+                if suggestion_ui.confirm_rect and suggestion_ui.confirm_rect.collidepoint(tap_pos):
+                    suggestion_state.confirm()
+                    return
+                if suggestion_ui.dismiss_rect and suggestion_ui.dismiss_rect.collidepoint(tap_pos):
+                    suggestion_state.dismiss()
+                    return
+                if suggestion_ui.close_rect and suggestion_ui.close_rect.collidepoint(tap_pos):
+                    suggestion_state.dismiss()
+                    return
+            wake_controller.show_app()
+            return
+
+        if current_screen == Screen.APP:
+            if app_ui.weather_rect and app_ui.weather_rect.collidepoint(tap_pos):
                 wake_controller.show_weather()
-        elif current_screen == Screen.WEATHER and weather_ui.dismiss_rect is not None:
-            if weather_ui.dismiss_rect.collidepoint(tap_pos):
-                wake_controller.show_app()
+            elif app_ui.today_rect and app_ui.today_rect.collidepoint(tap_pos):
+                wake_controller.show_calendar()
+            elif app_ui.calendar_rect and app_ui.calendar_rect.collidepoint(tap_pos):
+                wake_controller.show_calendar()
+            return
+
+        if current_screen == Screen.WEATHER:
+            if weather_ui.dismiss_rect and weather_ui.dismiss_rect.collidepoint(tap_pos):
+                wake_controller.dismiss()
+            return
+
+        if current_screen == Screen.CALENDAR:
+            if calendar_ui.dismiss_rect and calendar_ui.dismiss_rect.collidepoint(tap_pos):
+                wake_controller.dismiss()
+            return
+
+        if current_screen == Screen.CELEBRATION:
+            wake_controller.dismiss()
+            return
+
+        if current_screen == Screen.REFLECTION:
+            if reflection_ui.dismiss_rect and reflection_ui.dismiss_rect.collidepoint(tap_pos):
+                wake_controller.dismiss()
+            return
 
     def _handle_events(
         self,
         window_size: tuple[int, int],
+        wake_controller: WakeController,
     ) -> tuple[bool, bool, tuple[int, int] | None]:
-        """Process quit events and report user activity and tap position."""
+        """Process quit events and report user activity and tap position.
+
+        "C" and "R" are developer shortcuts that jump straight to the
+        celebration and weekly-reflection screens — there's no real
+        completion-detection or scheduling engine to trigger them yet.
+        """
         had_activity = False
         tap_pos: tuple[int, int] | None = None
         for event in pygame.event.get():
@@ -232,4 +363,23 @@ class HomegirlApp:
                 tap_pos = (round(event.x * window_size[0]), round(event.y * window_size[1]))
             elif event.type == pygame.KEYDOWN:
                 had_activity = True
+                if event.key == pygame.K_c:
+                    wake_controller.show_celebration()
+                elif event.key == pygame.K_r:
+                    wake_controller.show_reflection()
+                elif wake_controller.screen == Screen.AMBIENT:
+                    wake_controller.show_app()
         return True, had_activity, tap_pos
+
+
+def _home_weather_text(weather: WeatherData) -> str:
+    if not weather.is_available:
+        return "Unavailable"
+    temp = f"{round(weather.current_temp)}°F"
+    condition = weather.condition.title() if weather.condition else "Weather"
+    return f"{condition} · {temp}"
+
+
+def _reflection_time_text(moment: datetime) -> str:
+    time_text = moment.strftime("%I:%M %p").lstrip("0")
+    return f"{time_text} · {moment.strftime('%A')}"

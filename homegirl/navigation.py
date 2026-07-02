@@ -11,10 +11,21 @@ class Screen(str, Enum):
     AMBIENT = "ambient"
     APP = "app"
     WEATHER = "weather"
+    CALENDAR = "calendar"
+    CELEBRATION = "celebration"
+    REFLECTION = "reflection"
+
+
+_RETURN_SCREEN: dict[Screen, Screen] = {
+    Screen.WEATHER: Screen.APP,
+    Screen.CALENDAR: Screen.APP,
+    Screen.CELEBRATION: Screen.AMBIENT,
+    Screen.REFLECTION: Screen.AMBIENT,
+}
 
 
 class WakeController:
-    """Switch between ambient, app, and weather screens based on activity."""
+    """Switch between ambient, app, and detail screens based on activity."""
 
     def __init__(self, idle_timeout_seconds: float) -> None:
         self._idle_timeout_seconds = idle_timeout_seconds
@@ -25,22 +36,44 @@ class WakeController:
     def screen(self) -> Screen:
         return self._screen
 
+    def show(self, screen: Screen) -> None:
+        """Navigate directly to a screen."""
+        self._screen = screen
+        self._inactive_seconds = 0.0
+
     def show_weather(self) -> None:
         """Navigate to the weather detail screen."""
-        self._screen = Screen.WEATHER
-        self._inactive_seconds = 0.0
+        self.show(Screen.WEATHER)
+
+    def show_calendar(self) -> None:
+        """Navigate to the calendar detail screen."""
+        self.show(Screen.CALENDAR)
+
+    def show_celebration(self) -> None:
+        """Navigate to the celebration takeover screen."""
+        self.show(Screen.CELEBRATION)
+
+    def show_reflection(self) -> None:
+        """Navigate to the weekly reflection screen."""
+        self.show(Screen.REFLECTION)
 
     def show_app(self) -> None:
         """Return to the app grid screen."""
-        self._screen = Screen.APP
-        self._inactive_seconds = 0.0
+        self.show(Screen.APP)
+
+    def dismiss(self) -> None:
+        """Return from the current detail screen to where it was reached from."""
+        self.show(_RETURN_SCREEN.get(self._screen, Screen.AMBIENT))
 
     def update(self, delta_seconds: float, had_activity: bool) -> Screen:
-        """Advance screen state for the current frame."""
+        """Advance the idle timer for the current frame.
+
+        Navigating between screens (including waking from ambient) happens
+        explicitly via ``show()``/``dismiss()`` in the input handlers, so this
+        only has to track the idle timeout back to ambient.
+        """
         if had_activity:
             self._inactive_seconds = 0.0
-            if self._screen == Screen.AMBIENT:
-                self._screen = Screen.APP
             return self._screen
 
         if self._screen != Screen.AMBIENT:
