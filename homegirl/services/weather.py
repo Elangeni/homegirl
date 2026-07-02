@@ -126,6 +126,8 @@ class WeatherService:
         day = _dict_value(today, "day")
         condition_text = _string_value(condition, "text")
 
+        self._log_observation(payload, current)
+
         return WeatherData(
             current_temp=_float_value(current, "temp_f"),
             feels_like=_float_value(current, "feelslike_f"),
@@ -136,6 +138,18 @@ class WeatherService:
             humidity=_int_value(current, "humidity"),
             wind_speed=_float_value(current, "wind_mph"),
             last_updated=now,
+        )
+
+    def _log_observation(self, payload: Any, current: dict[str, Any]) -> None:
+        location = payload.get("location") if isinstance(payload, dict) else None
+        location_name = location.get("name") if isinstance(location, dict) else None
+        location_region = location.get("region") if isinstance(location, dict) else None
+        observed_at = current.get("last_updated")
+        logger.info(
+            "WeatherAPI observation for %s, %s was taken at %s.",
+            location_name or "unknown location",
+            location_region or "unknown region",
+            observed_at or "unknown time",
         )
 
     def _keep_cache_or_error(self, error: str) -> None:
