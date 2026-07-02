@@ -9,10 +9,13 @@ import pygame
 from homegirl.animation import AmbientBackground
 from homegirl.clock import format_date, format_time, now_local
 from homegirl.greeting import get_daypart, get_greeting
+from homegirl.models.schedule import ScheduleData
 from homegirl.models.weather import WeatherData
 from homegirl.national_day import NationalDayClient
 from homegirl.navigation import Screen, WakeController
+from homegirl.schedule_insight import get_schedule_summary
 from homegirl.settings import Settings
+from homegirl.services.calendar import CalendarService
 from homegirl.services.weather import WeatherService
 from homegirl.theme import Theme, get_theme
 from homegirl.transition import ScreenTransition
@@ -44,6 +47,13 @@ class HomegirlApp:
         self._weather = WeatherService(
             settings.weather_api_key,
             settings.weather_timeout_seconds,
+        )
+        self._calendar = CalendarService(
+            settings.google_client_id,
+            settings.google_client_secret,
+            settings.google_calendar_token_path,
+            settings.google_calendar_id,
+            settings.google_calendar_timeout_seconds,
         )
 
     def run(self) -> None:
@@ -78,6 +88,7 @@ class HomegirlApp:
                 daypart = get_daypart(moment)
                 theme = get_theme(daypart)
                 weather = self._weather.get_weather(moment)
+                schedule = self._calendar.get_schedule(moment)
 
                 background.update(delta_seconds)
                 if screen_transition.is_active:
@@ -89,6 +100,7 @@ class HomegirlApp:
                         moment,
                         theme,
                         weather,
+                        schedule,
                         background,
                         ambient_ui,
                         app_ui,
@@ -100,6 +112,7 @@ class HomegirlApp:
                         moment,
                         theme,
                         weather,
+                        schedule,
                         background,
                         ambient_ui,
                         app_ui,
@@ -115,6 +128,7 @@ class HomegirlApp:
                         moment,
                         theme,
                         weather,
+                        schedule,
                         background,
                         ambient_ui,
                         app_ui,
@@ -131,6 +145,7 @@ class HomegirlApp:
         moment: datetime,
         theme: Theme,
         weather: WeatherData,
+        schedule: ScheduleData,
         background: AmbientBackground,
         ambient_ui: AmbientUI,
         app_ui: AppUI,
@@ -170,7 +185,12 @@ class HomegirlApp:
 
         app_ui.draw(
             surface,
-            AppViewModel(time_text=format_time(moment), labels=APP_LABELS, weather=weather),
+            AppViewModel(
+                time_text=format_time(moment),
+                labels=APP_LABELS,
+                weather=weather,
+                schedule_summary=get_schedule_summary(schedule, moment),
+            ),
         )
 
     def _handle_tap(

@@ -21,12 +21,22 @@ class Settings:
     national_day_fallback_api_url: str = "https://www.checkiday.com/api/3/?d=today"
     weather_api_key: str | None = None
     weather_timeout_seconds: float = 4.0
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_calendar_id: str = "primary"
+    google_calendar_token_file: str = "google_calendar_token.json"
+    google_calendar_timeout_seconds: float = 4.0
     fullscreen: bool = True
 
     @property
     def assets_dir(self) -> Path:
         """Return the root folder for background frame assets."""
         return self.base_dir / "assets"
+
+    @property
+    def google_calendar_token_path(self) -> Path:
+        """Return where the Google Calendar OAuth refresh token is stored."""
+        return self.base_dir / self.google_calendar_token_file
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -43,5 +53,12 @@ class Settings:
                 cls.national_day_fallback_api_url,
             ),
             weather_api_key=os.getenv("WEATHER_API_KEY"),
+            google_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
+            google_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+            google_calendar_id=os.getenv("GOOGLE_CALENDAR_ID", cls.google_calendar_id),
+            google_calendar_token_file=os.getenv(
+                "GOOGLE_CALENDAR_TOKEN_FILE",
+                cls.google_calendar_token_file,
+            ),
             fullscreen=fullscreen_value not in {"0", "false", "no", "off"},
         )
