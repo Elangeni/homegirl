@@ -45,6 +45,7 @@ class AppViewModel:
     time_text: str
     labels: tuple[str, str, str, str]
     weather: WeatherData
+    schedule_summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -190,6 +191,10 @@ class AppUI:
             if index == 0:
                 self.weather_tile_rect = rect
                 self._draw_weather_tile(surface, rect, model.weather)
+            elif index == 1:
+                self._draw_schedule_tile(surface, rect, model.schedule_summary)
+            elif index == 2:
+                self._draw_coming_soon_tile(surface, rect)
             else:
                 self._draw_tile(surface, rect, label)
 
@@ -236,6 +241,46 @@ class AppUI:
                 muted_color,
             )
             surface.blit(high_low, high_low.get_rect(topleft=(left, top + self._spacing(158))))
+
+    def _draw_schedule_tile(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        summary: str | None,
+    ) -> None:
+        self._draw_tile_frame(surface, rect)
+
+        title_color = (68, 68, 60)
+        body_color = (33, 33, 29)
+        muted_color = (88, 88, 78)
+        left = rect.left + self._spacing(28)
+        top = rect.top + self._spacing(24)
+        max_width = rect.width - self._spacing(56)
+
+        title = _render_text(self._card_title_font, "Schedule", title_color)
+        surface.blit(title, title.get_rect(topleft=(left, top)))
+
+        text = summary or "Unavailable"
+        color = body_color if summary else muted_color
+        body_top = top + self._spacing(58)
+        for line in _wrap_text(self._card_body_font, text, max_width):
+            line_image = _render_text(self._card_body_font, line, color)
+            surface.blit(line_image, line_image.get_rect(topleft=(left, body_top)))
+            body_top += line_image.get_height() + self._spacing(4)
+
+    def _draw_coming_soon_tile(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
+        self._draw_tile_frame(surface, rect)
+
+        title_color = (68, 68, 60)
+        muted_color = (88, 88, 78)
+        left = rect.left + self._spacing(28)
+        top = rect.top + self._spacing(24)
+
+        title = _render_text(self._card_title_font, "Mail", title_color)
+        surface.blit(title, title.get_rect(topleft=(left, top)))
+
+        body = _render_text(self._card_body_font, "Coming soon", muted_color)
+        surface.blit(body, body.get_rect(topleft=(left, top + self._spacing(58))))
 
     def _draw_tile(self, surface: pygame.Surface, rect: pygame.Rect, label: str) -> None:
         self._draw_tile_frame(surface, rect)
