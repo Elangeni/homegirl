@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import pygame
 
-from homegirl.models.weather import WeatherData
+from homegirl.models.weather import HourlyForecast, WeatherData
 from homegirl.theme import Theme
 
 
@@ -44,6 +45,16 @@ class AppViewModel:
     time_text: str
     labels: tuple[str, str, str, str]
     weather: WeatherData
+
+
+@dataclass(frozen=True)
+class WeatherViewModel:
+    """Data required to render the weather detail screen."""
+
+    time_text: str
+    weather: WeatherData
+    headline: str | None
+    advice: str | None
 
 
 class AmbientUI:
@@ -129,6 +140,7 @@ class AppUI:
     def __init__(self) -> None:
         self._fonts_ready = False
         self._scale = 1.0
+        self.weather_tile_rect: pygame.Rect | None = None
 
     def draw(self, surface: pygame.Surface, model: AppViewModel) -> None:
         """Draw a simple status bar and 2-by-2 app grid."""
@@ -176,6 +188,7 @@ class AppUI:
                 cell_height,
             )
             if index == 0:
+                self.weather_tile_rect = rect
                 self._draw_weather_tile(surface, rect, model.weather)
             else:
                 self._draw_tile(surface, rect, label)
@@ -265,6 +278,149 @@ class AppUI:
         return round(value * self._scale)
 
 
+class WeatherUI:
+    """Render the weather detail screen reached from the app grid."""
+
+    def __init__(self) -> None:
+        self._fonts_ready = False
+        self._scale = 1.0
+        self.dismiss_rect: pygame.Rect | None = None
+
+    def draw(self, surface: pygame.Surface, model: WeatherViewModel) -> None:
+        """Draw the current reading, situational copy, and hourly strip."""
+        self._ensure_fonts(surface)
+
+        surface.fill((242, 240, 234))
+        width, _ = surface.get_size()
+        margin_x = self._spacing(140)
+        margin_top = self._spacing(40)
+        text_color = (34, 34, 30)
+        muted_color = (88, 88, 78)
+
+        time_image = _render_text(self._time_font, model.time_text, text_color)
+        surface.blit(time_image, time_image.get_rect(topleft=(margin_x, margin_top)))
+
+        dismiss_size = self._spacing(32)
+        self.dismiss_rect = pygame.Rect(
+            width - margin_x - dismiss_size,
+            margin_top,
+            dismiss_size,
+            dismiss_size,
+        )
+        pygame.draw.circle(
+            surface,
+            (30, 42, 58, 20),
+            self.dismiss_rect.center,
+            dismiss_size // 2,
+            width=max(1, self._spacing(2)),
+        )
+        _draw_x_mark(surface, self.dismiss_rect, text_color, self._spacing(4))
+
+        if not model.weather.is_available:
+            unavailable = _render_text(self._advice_font, "Weather unavailable", muted_color)
+            surface.blit(unavailable, unavailable.get_rect(topleft=(margin_x, margin_top + self._spacing(120))))
+            return
+
+        y = margin_top + self._spacing(80)
+        if model.headline:
+            max_text_width = round(width * 0.55)
+            for line in _wrap_text(self._headline_font, model.headline, max_text_width):
+                line_image = _render_text(self._headline_font, line, text_color)
+                surface.blit(line_image, line_image.get_rect(topleft=(margin_x, y)))
+                y += line_image.get_height() + self._spacing(4)
+
+        y += self._spacing(40)
+        temp_image = _render_text(
+            self._temp_font,
+            _format_temp_full(model.weather.current_temp),
+            text_color,
+        )
+        temp_rect = temp_image.get_rect(topleft=(margin_x, y))
+        surface.blit(temp_image, temp_rect)
+
+        detail_x = temp_rect.right + self._spacing(32)
+        detail_y = temp_rect.top + self._spacing(8)
+        if model.weather.condition:
+            condition_image = _render_text(
+                self._condition_font,
+                model.weather.condition.upper(),
+                muted_color,
+            )
+            surface.blit(condition_image, condition_image.get_rect(topleft=(detail_x, detail_y)))
+            detail_y += condition_image.get_height() + self._spacing(4)
+
+        if model.advice:
+            advice_image = _render_text(self._advice_font, model.advice, muted_color)
+            surface.blit(advice_image, advice_image.get_rect(topleft=(detail_x, detail_y)))
+
+        forecast_top = temp_rect.bottom + self._spacing(64)
+        forecast_bottom = surface.get_height() - self._spacing(80)
+        if model.weather.hourly:
+            self._draw_hourly_strip(
+                surface,
+                model.weather.hourly,
+                pygame.Rect(margin_x, forecast_top, width - margin_x * 2, forecast_bottom - forecast_top),
+                text_color,
+                muted_color,
+            )
+
+    def _draw_hourly_strip(
+        self,
+        surface: pygame.Surface,
+        hourly: tuple[HourlyForecast, ...],
+        rect: pygame.Rect,
+        text_color: tuple[int, int, int],
+        muted_color: tuple[int, int, int],
+    ) -> None:
+        line_color = (43, 43, 39)
+        pygame.draw.line(
+            surface,
+            line_color,
+            (rect.left, rect.top),
+            (rect.right, rect.top),
+            max(1, self._spacing(1)),
+        )
+
+        slot_top = rect.top + self._spacing(24)
+        slot_width = rect.width // len(hourly)
+        icon_size = self._spacing(24)
+
+        for index, hour in enumerate(hourly):
+            slot_center_x = rect.left + slot_width * index + slot_width // 2
+
+            hour_label = _render_text(self._hour_font, _short_hour_label(hour.time), muted_color)
+            surface.blit(hour_label, hour_label.get_rect(midtop=(slot_center_x, slot_top)))
+
+            icon_top = slot_top + hour_label.get_height() + self._spacing(12)
+            icon_rect = pygame.Rect(0, 0, icon_size, icon_size)
+            icon_rect.center = (slot_center_x, icon_top + icon_size // 2)
+            _draw_condition_icon(surface, icon_rect, hour.condition, muted_color)
+
+            temp_top = icon_rect.bottom + self._spacing(12)
+            temp_label = _render_text(self._hour_temp_font, _format_temp(hour.temp), text_color)
+            surface.blit(temp_label, temp_label.get_rect(midtop=(slot_center_x, temp_top)))
+
+    def _ensure_fonts(self, surface: pygame.Surface) -> None:
+        if self._fonts_ready:
+            return
+
+        self._scale = max(
+            0.82,
+            min(surface.get_height() / 720, surface.get_width() / 1280),
+        )
+        self._time_font = _font(round(20 * self._scale), 500)
+        self._headline_font = _font(round(34 * self._scale), 500)
+        self._temp_font = _font(round(120 * self._scale), 700)
+        self._condition_font = _font(round(15 * self._scale), 300)
+        self._advice_font = _font(round(18 * self._scale), 300)
+        self._hour_font = _font(round(14 * self._scale), 500)
+        self._hour_temp_font = _font(round(20 * self._scale), 600)
+        self._fonts_ready = True
+
+    def _spacing(self, value: int) -> int:
+        return round(value * self._scale)
+
+
 def _render_text(
     font: pygame.font.Font,
     text: str,
@@ -282,3 +438,108 @@ def _format_temp(value: float | None) -> str:
     if value is None:
         return ""
     return f"{round(value)}°"
+
+
+def _format_temp_full(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{round(value)}°F"
+
+
+def _short_hour_label(moment: datetime) -> str:
+    return moment.strftime("%I %p").lstrip("0")
+
+
+def _wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
+    """Greedily wrap text onto lines no wider than max_width."""
+    words = text.split(" ")
+    lines: list[str] = []
+    current = ""
+
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and font.size(candidate)[0] > max_width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+
+    if current:
+        lines.append(current)
+
+    return lines
+
+
+def _draw_x_mark(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    color: tuple[int, int, int],
+    thickness: int,
+) -> None:
+    """Draw a small dismiss glyph centered in rect."""
+    inset = round(rect.width * 0.3)
+    pygame.draw.line(
+        surface,
+        color,
+        (rect.left + inset, rect.top + inset),
+        (rect.right - inset, rect.bottom - inset),
+        max(1, thickness),
+    )
+    pygame.draw.line(
+        surface,
+        color,
+        (rect.right - inset, rect.top + inset),
+        (rect.left + inset, rect.bottom - inset),
+        max(1, thickness),
+    )
+
+
+def _condition_category(condition: str | None) -> str:
+    """Classify condition text into a coarse icon category."""
+    text = (condition or "").lower()
+    if "thunder" in text or "storm" in text:
+        return "thunder"
+    if "snow" in text or "sleet" in text or "ice" in text:
+        return "snow"
+    if "rain" in text or "drizzle" in text or "shower" in text:
+        return "rain"
+    if "cloud" in text or "overcast" in text or "fog" in text or "mist" in text:
+        return "cloud"
+    return "clear"
+
+
+def _draw_condition_icon(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    condition: str | None,
+    color: tuple[int, int, int],
+) -> None:
+    """Draw a simple placeholder glyph for the hourly forecast condition."""
+    category = _condition_category(condition)
+    width = max(1, round(rect.width * 0.08))
+
+    if category == "clear":
+        radius = round(rect.width * 0.32)
+        pygame.draw.circle(surface, color, rect.center, radius, width=width)
+        return
+
+    cloud_rect = pygame.Rect(0, 0, round(rect.width * 0.8), round(rect.height * 0.5))
+    cloud_rect.center = (rect.centerx, rect.centery - round(rect.height * 0.05))
+    pygame.draw.ellipse(surface, color, cloud_rect, width=width)
+
+    if category == "cloud" or category == "snow":
+        return
+
+    if category == "rain":
+        for offset in (-0.2, 0.0, 0.2):
+            x = rect.centerx + round(offset * rect.width)
+            top = cloud_rect.bottom + round(rect.height * 0.05)
+            bottom = top + round(rect.height * 0.22)
+            pygame.draw.line(surface, color, (x, top), (x - round(rect.width * 0.08), bottom), width)
+        return
+
+    if category == "thunder":
+        bolt_top = (rect.centerx + round(rect.width * 0.08), cloud_rect.bottom)
+        bolt_mid = (rect.centerx - round(rect.width * 0.08), rect.centery + round(rect.height * 0.18))
+        bolt_bottom = (rect.centerx + round(rect.width * 0.02), rect.bottom)
+        pygame.draw.lines(surface, color, False, [bolt_top, bolt_mid, bolt_bottom], width)

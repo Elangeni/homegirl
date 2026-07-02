@@ -9,12 +9,13 @@ from typing import Any
 
 import requests
 
-from homegirl.models.weather import WeatherData
+from homegirl.models.weather import HourlyForecast, WeatherData
 
 
 WEATHER_API_URL = "https://api.weatherapi.com/v1/forecast.json"
 LOCATION = "1907 Oak St, San Francisco, CA 94117"
 WEATHER_CACHE_SECONDS = 30 * 60
+HOURLY_FORECAST_HOURS = 8
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,36 @@ class WeatherService:
             humidity=_int_value(current, "humidity"),
             wind_speed=_float_value(current, "wind_mph"),
             last_updated=now,
+            hourly=self._parse_hourly(today, now),
         )
+
+    def _parse_hourly(self, today: dict[str, Any], now: datetime) -> tuple[HourlyForecast, ...]:
+        hours = _list_value(today, "hour")
+        current_hour = now.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+
+        upcoming: list[HourlyForecast] = []
+        for hour in hours:
+            if not isinstance(hour, dict):
+                continue
+            forecast = self._parse_hour(hour)
+            if forecast is None or forecast.time < current_hour:
+                continue
+            upcoming.append(forecast)
+
+        return tuple(upcoming[:HOURLY_FORECAST_HOURS])
+
+    def _parse_hour(self, hour: dict[str, Any]) -> HourlyForecast | None:
+        try:
+            time = datetime.strptime(_string_value(hour, "time"), "%Y-%m-%d %H:%M")
+            condition = _dict_value(hour, "condition")
+            return HourlyForecast(
+                time=time,
+                temp=_float_value(hour, "temp_f"),
+                condition=_string_value(condition, "text"),
+                chance_of_rain=_float_value(hour, "chance_of_rain"),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
 
     def _log_observation(self, payload: Any, current: dict[str, Any]) -> None:
         location = payload.get("location") if isinstance(payload, dict) else None
