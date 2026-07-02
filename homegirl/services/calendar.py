@@ -214,7 +214,10 @@ class CalendarService:
             return ScheduleEvent(title=title, start=start, end=end, all_day=False)
 
         if "date" in start_info:
-            start = datetime.fromisoformat(start_info["date"])
+            # All-day events come back as a bare date with no offset. Attach the
+            # system's local timezone so they can be sorted/compared alongside
+            # the offset-aware datetimes timed events use elsewhere.
+            start = datetime.fromisoformat(start_info["date"]).astimezone()
             return ScheduleEvent(title=title, start=start, end=None, all_day=True)
 
         return None
