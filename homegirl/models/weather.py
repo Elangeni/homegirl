@@ -7,6 +7,16 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
+class HourlyForecast:
+    """One hour of forecast data for the hourly strip."""
+
+    time: datetime
+    temp: float | None = None
+    condition: str | None = None
+    chance_of_rain: float | None = None
+
+
+@dataclass(frozen=True)
 class WeatherData:
     """Weather values the UI and future features can safely consume."""
 
@@ -20,6 +30,7 @@ class WeatherData:
     humidity: int | None = None
     wind_speed: float | None = None
     last_updated: datetime | None = None
+    hourly: tuple[HourlyForecast, ...] = ()
     error: str | None = None
 
     @property

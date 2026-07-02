@@ -16,7 +16,15 @@ from homegirl.settings import Settings
 from homegirl.services.weather import WeatherService
 from homegirl.theme import Theme, get_theme
 from homegirl.transition import ScreenTransition
-from homegirl.ui import AmbientUI, AmbientViewModel, AppUI, AppViewModel
+from homegirl.ui import (
+    AmbientUI,
+    AmbientViewModel,
+    AppUI,
+    AppViewModel,
+    WeatherUI,
+    WeatherViewModel,
+)
+from homegirl.weather_insight import get_advice, get_headline
 
 
 APP_IDLE_TIMEOUT_SECONDS = 30.0
@@ -34,8 +42,8 @@ class HomegirlApp:
             settings.national_day_timeout_seconds,
         )
         self._weather = WeatherService(
-            settings.openweather_api_key,
-            settings.openweather_timeout_seconds,
+            settings.weather_api_key,
+            settings.weather_timeout_seconds,
         )
 
     def run(self) -> None:
@@ -54,13 +62,15 @@ class HomegirlApp:
             background = AmbientBackground(self._settings.animation_quality_scale)
             ambient_ui = AmbientUI()
             app_ui = AppUI()
+            weather_ui = WeatherUI()
             wake_controller = WakeController(APP_IDLE_TIMEOUT_SECONDS)
             screen_transition = ScreenTransition(Screen.AMBIENT, SCREEN_TRANSITION_SECONDS)
             running = True
 
             while running:
                 delta_seconds = clock.tick(self._settings.frames_per_second) / 1000.0
-                running, had_activity = self._handle_events()
+                running, had_activity, tap_pos = self._handle_events(window_size)
+                self._handle_tap(tap_pos, wake_controller, app_ui, weather_ui)
                 active_screen = wake_controller.update(delta_seconds, had_activity)
                 screen_transition.update(active_screen, delta_seconds)
 
@@ -82,6 +92,7 @@ class HomegirlApp:
                         background,
                         ambient_ui,
                         app_ui,
+                        weather_ui,
                     )
                     self._draw_screen(
                         target_surface,
@@ -92,6 +103,7 @@ class HomegirlApp:
                         background,
                         ambient_ui,
                         app_ui,
+                        weather_ui,
                     )
                     screen.blit(source_surface, (0, 0))
                     target_surface.set_alpha(screen_transition.target_alpha)
@@ -106,6 +118,7 @@ class HomegirlApp:
                         background,
                         ambient_ui,
                         app_ui,
+                        weather_ui,
                     )
                 pygame.display.flip()
         finally:
@@ -121,6 +134,7 @@ class HomegirlApp:
         background: AmbientBackground,
         ambient_ui: AmbientUI,
         app_ui: AppUI,
+        weather_ui: WeatherUI,
     ) -> None:
         """Draw one top-level screen onto a surface."""
         if active_screen == Screen.AMBIENT:
@@ -141,23 +155,61 @@ class HomegirlApp:
             )
             return
 
+        if active_screen == Screen.WEATHER:
+            daypart = get_daypart(moment)
+            weather_ui.draw(
+                surface,
+                WeatherViewModel(
+                    time_text=format_time(moment),
+                    weather=weather,
+                    headline=get_headline(weather),
+                    advice=get_advice(weather, daypart),
+                ),
+            )
+            return
+
         app_ui.draw(
             surface,
             AppViewModel(time_text=format_time(moment), labels=APP_LABELS, weather=weather),
         )
 
-    def _handle_events(self) -> tuple[bool, bool]:
-        """Process quit events and report user activity."""
+    def _handle_tap(
+        self,
+        tap_pos: tuple[int, int] | None,
+        wake_controller: WakeController,
+        app_ui: AppUI,
+        weather_ui: WeatherUI,
+    ) -> None:
+        """Navigate between the app grid and weather screens on tap."""
+        if tap_pos is None:
+            return
+
+        current_screen = wake_controller.screen
+        if current_screen == Screen.APP and app_ui.weather_tile_rect is not None:
+            if app_ui.weather_tile_rect.collidepoint(tap_pos):
+                wake_controller.show_weather()
+        elif current_screen == Screen.WEATHER and weather_ui.dismiss_rect is not None:
+            if weather_ui.dismiss_rect.collidepoint(tap_pos):
+                wake_controller.show_app()
+
+    def _handle_events(
+        self,
+        window_size: tuple[int, int],
+    ) -> tuple[bool, bool, tuple[int, int] | None]:
+        """Process quit events and report user activity and tap position."""
         had_activity = False
+        tap_pos: tuple[int, int] | None = None
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return False, had_activity
+                return False, had_activity, tap_pos
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return False, had_activity
-            if event.type in {
-                pygame.FINGERDOWN,
-                pygame.MOUSEBUTTONDOWN,
-                pygame.KEYDOWN,
-            }:
+                return False, had_activity, tap_pos
+            if event.type == pygame.MOUSEBUTTONDOWN:
                 had_activity = True
-        return True, had_activity
+                tap_pos = event.pos
+            elif event.type == pygame.FINGERDOWN:
+                had_activity = True
+                tap_pos = (round(event.x * window_size[0]), round(event.y * window_size[1]))
+            elif event.type == pygame.KEYDOWN:
+                had_activity = True
+        return True, had_activity, tap_pos

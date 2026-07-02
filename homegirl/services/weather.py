@@ -1,4 +1,4 @@
-"""OpenWeather Current Weather API integration with in-memory caching."""
+"""WeatherAPI.com integration with in-memory caching."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from typing import Any
 
 import requests
 
-from homegirl.models.weather import WeatherData
+from homegirl.models.weather import HourlyForecast, WeatherData
 
 
-LAT = 37.7749
-LON = -122.4194
-OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
+WEATHER_API_URL = "https://api.weatherapi.com/v1/forecast.json"
+LOCATION = "1907 Oak St, San Francisco, CA 94117"
 WEATHER_CACHE_SECONDS = 30 * 60
+HOURLY_FORECAST_HOURS = 8
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class WeatherService:
         """Return cached weather and start a background refresh when needed."""
         if not self._api_key:
             if not self._reported_missing_key:
-                logger.info("OpenWeather API key is missing; weather is unavailable.")
+                logger.info("WeatherAPI key is missing; weather is unavailable.")
                 self._reported_missing_key = True
             return self._weather
 
@@ -75,11 +75,11 @@ class WeatherService:
         try:
             weather = self._fetch_weather(now)
         except requests.RequestException as exc:
-            logger.warning("OpenWeather request failed: %s", exc)
+            logger.warning("WeatherAPI request failed: %s", exc)
             self._keep_cache_or_error("Weather unavailable")
             return
         except (IndexError, KeyError, TypeError, ValueError) as exc:
-            logger.warning("OpenWeather response could not be parsed: %s", exc)
+            logger.warning("WeatherAPI response could not be parsed: %s", exc)
             self._keep_cache_or_error("Weather unavailable")
             return
 
@@ -91,38 +91,84 @@ class WeatherService:
 
     def _fetch_weather(self, now: datetime) -> WeatherData:
         response = requests.get(
-            OPENWEATHER_CURRENT_URL,
+            WEATHER_API_URL,
             params={
-                "lat": LAT,
-                "lon": LON,
-                "appid": self._api_key,
-                "units": "imperial",
+                "key": self._api_key,
+                "q": LOCATION,
+                "days": 1,
+                "aqi": "no",
+                "alerts": "no",
             },
             timeout=self._timeout_seconds,
         )
         response.raise_for_status()
-        payload = response.json()
-        return self._parse_weather(payload, now)
+        return self._parse_weather(response.json(), now)
 
     def _parse_weather(self, payload: Any, now: datetime) -> WeatherData:
         if not isinstance(payload, dict):
             raise ValueError("weather payload is not an object")
 
-        main = _dict_value(payload, "main")
-        wind = _dict_value(payload, "wind")
-        weather_items = _list_value(payload, "weather")
-        first_condition = _dict_item(weather_items, 0)
+        current = _dict_value(payload, "current")
+        condition = _dict_value(current, "condition")
+        forecast = _dict_value(payload, "forecast")
+        forecast_days = _list_value(forecast, "forecastday")
+        today = _dict_item(forecast_days, 0)
+        day = _dict_value(today, "day")
+        condition_text = _string_value(condition, "text")
+
+        self._log_observation(payload, current)
 
         return WeatherData(
-            current_temp=_float_value(main, "temp"),
-            feels_like=_float_value(main, "feels_like"),
-            condition_main=_string_value(first_condition, "main"),
-            condition=_string_value(first_condition, "description"),
-            high_temp=_float_value(main, "temp_max"),
-            low_temp=_float_value(main, "temp_min"),
-            humidity=_int_value(main, "humidity"),
-            wind_speed=_float_value(wind, "speed"),
+            current_temp=_float_value(current, "temp_f"),
+            feels_like=_float_value(current, "feelslike_f"),
+            condition_main=condition_text,
+            condition=condition_text,
+            high_temp=_float_value(day, "maxtemp_f"),
+            low_temp=_float_value(day, "mintemp_f"),
+            humidity=_int_value(current, "humidity"),
+            wind_speed=_float_value(current, "wind_mph"),
             last_updated=now,
+            hourly=self._parse_hourly(today, now),
+        )
+
+    def _parse_hourly(self, today: dict[str, Any], now: datetime) -> tuple[HourlyForecast, ...]:
+        hours = _list_value(today, "hour")
+        current_hour = now.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+
+        upcoming: list[HourlyForecast] = []
+        for hour in hours:
+            if not isinstance(hour, dict):
+                continue
+            forecast = self._parse_hour(hour)
+            if forecast is None or forecast.time < current_hour:
+                continue
+            upcoming.append(forecast)
+
+        return tuple(upcoming[:HOURLY_FORECAST_HOURS])
+
+    def _parse_hour(self, hour: dict[str, Any]) -> HourlyForecast | None:
+        try:
+            time = datetime.strptime(_string_value(hour, "time"), "%Y-%m-%d %H:%M")
+            condition = _dict_value(hour, "condition")
+            return HourlyForecast(
+                time=time,
+                temp=_float_value(hour, "temp_f"),
+                condition=_string_value(condition, "text"),
+                chance_of_rain=_float_value(hour, "chance_of_rain"),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _log_observation(self, payload: Any, current: dict[str, Any]) -> None:
+        location = payload.get("location") if isinstance(payload, dict) else None
+        location_name = location.get("name") if isinstance(location, dict) else None
+        location_region = location.get("region") if isinstance(location, dict) else None
+        observed_at = current.get("last_updated")
+        logger.info(
+            "WeatherAPI observation for %s, %s was taken at %s.",
+            location_name or "unknown location",
+            location_region or "unknown region",
+            observed_at or "unknown time",
         )
 
     def _keep_cache_or_error(self, error: str) -> None:
