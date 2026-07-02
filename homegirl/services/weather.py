@@ -13,8 +13,7 @@ from homegirl.models.weather import WeatherData
 
 
 WEATHER_API_URL = "https://api.weatherapi.com/v1/forecast.json"
-AUTO_IP_LOCATION = "auto:ip"
-FALLBACK_LOCATION = "1907 Oak St, San Francisco, CA 94117"
+LOCATION = "1907 Oak St, San Francisco, CA 94117"
 WEATHER_CACHE_SECONDS = 30 * 60
 
 logger = logging.getLogger(__name__)
@@ -90,29 +89,19 @@ class WeatherService:
         logger.info("Weather updated successfully.")
 
     def _fetch_weather(self, now: datetime) -> WeatherData:
-        payload = self._request_payload(AUTO_IP_LOCATION)
-        return self._parse_weather(payload, now)
-
-    def _request_payload(self, location: str) -> Any:
-        try:
-            response = requests.get(
-                WEATHER_API_URL,
-                params={
-                    "key": self._api_key,
-                    "q": location,
-                    "days": 1,
-                    "aqi": "no",
-                    "alerts": "no",
-                },
-                timeout=self._timeout_seconds,
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException:
-            if location == AUTO_IP_LOCATION:
-                logger.info("Could not resolve weather location from network; using fallback address.")
-                return self._request_payload(FALLBACK_LOCATION)
-            raise
+        response = requests.get(
+            WEATHER_API_URL,
+            params={
+                "key": self._api_key,
+                "q": LOCATION,
+                "days": 1,
+                "aqi": "no",
+                "alerts": "no",
+            },
+            timeout=self._timeout_seconds,
+        )
+        response.raise_for_status()
+        return self._parse_weather(response.json(), now)
 
     def _parse_weather(self, payload: Any, now: datetime) -> WeatherData:
         if not isinstance(payload, dict):
