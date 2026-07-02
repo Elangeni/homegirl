@@ -34,8 +34,8 @@ class HomegirlApp:
             settings.national_day_timeout_seconds,
         )
         self._weather = WeatherService(
-            settings.openweather_api_key,
-            settings.openweather_timeout_seconds,
+            settings.weather_api_key,
+            settings.weather_timeout_seconds,
         )
 
     def run(self) -> None:
