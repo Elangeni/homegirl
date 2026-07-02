@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pygame
 
@@ -19,6 +19,7 @@ from homegirl.schedule_insight import (
     get_free_time_hint,
     get_schedule_headline,
     get_schedule_summary,
+    group_events_by_day,
     timed_events_today,
 )
 from homegirl.services.calendar import CalendarService
@@ -35,6 +36,10 @@ from homegirl.ui import (
     CalendarUI,
     CalendarViewModel,
     CelebrationUI,
+    DayDetailUI,
+    DayDetailViewModel,
+    FullCalendarUI,
+    FullCalendarViewModel,
     ReflectionUI,
     ReflectionViewModel,
     SuggestionUI,
@@ -73,6 +78,7 @@ class HomegirlApp:
             settings.google_calendar_id,
             settings.google_calendar_timeout_seconds,
         )
+        self._selected_day: date | None = None
 
     def run(self) -> None:
         """Run until the user quits or presses Escape."""
@@ -94,6 +100,8 @@ class HomegirlApp:
             app_ui = AppUI()
             weather_ui = WeatherUI()
             calendar_ui = CalendarUI()
+            full_calendar_ui = FullCalendarUI()
+            day_detail_ui = DayDetailUI()
             celebration_ui = CelebrationUI()
             reflection_ui = ReflectionUI()
             wake_controller = WakeController(APP_IDLE_TIMEOUT_SECONDS)
@@ -111,6 +119,7 @@ class HomegirlApp:
                     app_ui,
                     weather_ui,
                     calendar_ui,
+                    full_calendar_ui,
                     reflection_ui,
                 )
                 active_screen = wake_controller.update(delta_seconds, had_activity)
@@ -130,6 +139,8 @@ class HomegirlApp:
                     app_ui,
                     weather_ui,
                     calendar_ui,
+                    full_calendar_ui,
+                    day_detail_ui,
                     celebration_ui,
                     reflection_ui,
                 )
@@ -189,6 +200,8 @@ class HomegirlApp:
         app_ui: AppUI,
         weather_ui: WeatherUI,
         calendar_ui: CalendarUI,
+        full_calendar_ui: FullCalendarUI,
+        day_detail_ui: DayDetailUI,
         celebration_ui: CelebrationUI,
         reflection_ui: ReflectionUI,
     ) -> None:
@@ -243,6 +256,38 @@ class HomegirlApp:
             )
             return
 
+        if active_screen == Screen.FULL_CALENDAR:
+            month_schedule = self._calendar.get_month_schedule(moment)
+            full_calendar_ui.draw(
+                surface,
+                FullCalendarViewModel(
+                    time_text=format_time(moment),
+                    today=moment.date(),
+                    events_by_day=group_events_by_day(month_schedule),
+                ),
+                background,
+            )
+            return
+
+        if active_screen == Screen.DAY_DETAIL:
+            selected_day = self._selected_day or moment.date()
+            month_schedule = self._calendar.get_month_schedule(moment)
+            day_events = tuple(
+                event for event in sorted(month_schedule.events, key=lambda e: e.start)
+                if event.start.date() == selected_day
+            )
+            day_detail_ui.draw(
+                surface,
+                DayDetailViewModel(
+                    month_label=selected_day.strftime("%B %Y"),
+                    weekday_label=selected_day.strftime("%A"),
+                    date_label=selected_day.strftime("%B %-d"),
+                    events=day_events,
+                ),
+                background,
+            )
+            return
+
         if active_screen == Screen.CELEBRATION:
             celebration_ui.draw(
                 surface,
@@ -286,6 +331,7 @@ class HomegirlApp:
         app_ui: AppUI,
         weather_ui: WeatherUI,
         calendar_ui: CalendarUI,
+        full_calendar_ui: FullCalendarUI,
         reflection_ui: ReflectionUI,
     ) -> None:
         """Navigate between screens based on where the current screen was tapped."""
@@ -326,6 +372,21 @@ class HomegirlApp:
         if current_screen == Screen.CALENDAR:
             if calendar_ui.dismiss_rect and calendar_ui.dismiss_rect.collidepoint(tap_pos):
                 wake_controller.dismiss()
+            elif calendar_ui.full_calendar_rect and calendar_ui.full_calendar_rect.collidepoint(tap_pos):
+                wake_controller.show_full_calendar()
+            return
+
+        if current_screen == Screen.FULL_CALENDAR:
+            for day, rect in full_calendar_ui.day_rects.items():
+                if rect.collidepoint(tap_pos):
+                    self._selected_day = day
+                    wake_controller.show_day_detail()
+                    return
+            wake_controller.dismiss()
+            return
+
+        if current_screen == Screen.DAY_DETAIL:
+            wake_controller.dismiss()
             return
 
         if current_screen == Screen.CELEBRATION:

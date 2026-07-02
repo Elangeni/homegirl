@@ -8,7 +8,7 @@ returns is the seam that call will replace.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from homegirl.models.schedule import ScheduleData, ScheduleEvent
 
@@ -150,3 +150,11 @@ def _terse_hour(moment: datetime) -> str:
     if moment.minute == 0:
         return moment.strftime("%I %p").lstrip("0").replace(" AM", "").replace(" PM", "")
     return moment.strftime("%I:%M").lstrip("0")
+
+
+def group_events_by_day(schedule: ScheduleData) -> dict[date, tuple[ScheduleEvent, ...]]:
+    """Group a month's events by calendar day, each day's events sorted by start time."""
+    grouped: dict[date, list[ScheduleEvent]] = {}
+    for event in sorted(schedule.events, key=lambda e: e.start):
+        grouped.setdefault(event.start.date(), []).append(event)
+    return {day: tuple(events) for day, events in grouped.items()}

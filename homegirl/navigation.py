@@ -12,6 +12,8 @@ class Screen(str, Enum):
     APP = "app"
     WEATHER = "weather"
     CALENDAR = "calendar"
+    FULL_CALENDAR = "full_calendar"
+    DAY_DETAIL = "day_detail"
     CELEBRATION = "celebration"
     REFLECTION = "reflection"
 
@@ -19,6 +21,8 @@ class Screen(str, Enum):
 _RETURN_SCREEN: dict[Screen, Screen] = {
     Screen.WEATHER: Screen.APP,
     Screen.CALENDAR: Screen.APP,
+    Screen.FULL_CALENDAR: Screen.CALENDAR,
+    Screen.DAY_DETAIL: Screen.FULL_CALENDAR,
     Screen.CELEBRATION: Screen.AMBIENT,
     Screen.REFLECTION: Screen.AMBIENT,
 }
@@ -48,6 +52,14 @@ class WakeController:
     def show_calendar(self) -> None:
         """Navigate to the calendar detail screen."""
         self.show(Screen.CALENDAR)
+
+    def show_full_calendar(self) -> None:
+        """Navigate to the full month calendar screen."""
+        self.show(Screen.FULL_CALENDAR)
+
+    def show_day_detail(self) -> None:
+        """Navigate to a single day's agenda screen."""
+        self.show(Screen.DAY_DETAIL)
 
     def show_celebration(self) -> None:
         """Navigate to the celebration takeover screen."""

@@ -111,6 +111,15 @@ CELEBRATION_WASH_TOP_ALPHA = 210
 CELEBRATION_WASH_BOTTOM_ALPHA = 130
 CELEBRATION_TEXT_COLOR: Color = (42, 18, 8)
 
+# Full calendar and day detail reuse the night wallpaper regardless of the
+# actual daypart — they're reached from the calendar flow, not tied to time.
+DARK_BACKGROUND_IMAGE = "night.png"
+DARK_WASH_COLOR: Color = (11, 16, 32)
+DARK_WASH_TOP_ALPHA = 200
+DARK_WASH_BOTTOM_ALPHA = 140
+DARK_INK: Color = (248, 250, 252)
+DARK_MUTED: Color = (138, 155, 181)
+
 
 def get_theme(daypart: Daypart) -> Theme:
     """Return the visual theme for a daypart."""

@@ -13,6 +13,8 @@ from homegirl.models.schedule import ScheduleData, ScheduleEvent
 SCOPES = ("https://www.googleapis.com/auth/calendar.readonly",)
 SCHEDULE_CACHE_SECONDS = 5 * 60
 MAX_EVENTS = 10
+MONTH_CACHE_SECONDS = 30 * 60
+MAX_MONTH_EVENTS = 300
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,40 @@ class CalendarService:
         self._schedule = ScheduleData(error="Schedule unavailable")
         self._is_fetching = False
         self._reported_missing_credentials = False
+        self._month_schedule = ScheduleData(error="Schedule unavailable")
+        self._month_key: tuple[int, int] | None = None
+        self._is_fetching_month = False
+        self._month_refresh_interval = timedelta(seconds=MONTH_CACHE_SECONDS)
         self._lock = threading.Lock()
+
+    def get_month_schedule(self, now: datetime) -> ScheduleData:
+        """Return cached events for the calendar month containing `now`.
+
+        Starts a background refresh when the month changes or the cache is
+        stale. Returns "unavailable" rather than stale data from a different
+        month while the first fetch for a new month is in flight.
+        """
+        if not self._credentials_configured():
+            return self._month_schedule
+
+        key = (now.year, now.month)
+        with self._lock:
+            schedule = self._month_schedule
+            month_key = self._month_key
+            should_refresh = not self._is_fetching_month and self._should_refresh_month(schedule, now, key)
+            if should_refresh:
+                self._is_fetching_month = True
+
+        if should_refresh:
+            worker = threading.Thread(
+                target=self._refresh_month,
+                args=(now, key),
+                name="calendar-month-fetch",
+                daemon=True,
+            )
+            worker.start()
+
+        return schedule if month_key == key else ScheduleData(error="Schedule unavailable")
 
     def get_schedule(self, now: datetime) -> ScheduleData:
         """Return cached schedule and start a background refresh when needed."""
@@ -78,6 +113,13 @@ class CalendarService:
             return True
         return now - schedule.last_updated >= self._refresh_interval
 
+    def _should_refresh_month(self, schedule: ScheduleData, now: datetime, key: tuple[int, int]) -> bool:
+        if self._month_key != key:
+            return True
+        if schedule.last_updated is None:
+            return True
+        return now - schedule.last_updated >= self._month_refresh_interval
+
     def _refresh_schedule(self, now: datetime) -> None:
         try:
             schedule = self._fetch_schedule(now)
@@ -91,7 +133,38 @@ class CalendarService:
             self._is_fetching = False
         logger.info("Schedule updated successfully.")
 
+    def _refresh_month(self, now: datetime, key: tuple[int, int]) -> None:
+        try:
+            schedule = self._fetch_month(now)
+        except Exception as exc:  # noqa: BLE001 - any auth/API failure just means "unavailable"
+            logger.warning("Google Calendar month request failed: %s", exc)
+            with self._lock:
+                self._is_fetching_month = False
+            return
+
+        with self._lock:
+            self._month_schedule = schedule
+            self._month_key = key
+            self._is_fetching_month = False
+        logger.info("Month schedule updated successfully.")
+
     def _fetch_schedule(self, now: datetime) -> ScheduleData:
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        return self._fetch_range(now, start_of_day, end_of_day, MAX_EVENTS)
+
+    def _fetch_month(self, now: datetime) -> ScheduleData:
+        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_of_month = (start_of_month + timedelta(days=32)).replace(day=1)
+        return self._fetch_range(now, start_of_month, end_of_month, MAX_MONTH_EVENTS)
+
+    def _fetch_range(
+        self,
+        now: datetime,
+        start: datetime,
+        end: datetime,
+        max_results: int,
+    ) -> ScheduleData:
         import httplib2
         from google_auth_httplib2 import AuthorizedHttp
         from googleapiclient.discovery import build
@@ -100,18 +173,15 @@ class CalendarService:
         http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=self._timeout_seconds))
         service = build("calendar", "v3", http=http, cache_discovery=False)
 
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = start_of_day + timedelta(days=1)
-
         response = (
             service.events()
             .list(
                 calendarId=self._calendar_id,
-                timeMin=start_of_day.isoformat(),
-                timeMax=end_of_day.isoformat(),
+                timeMin=start.isoformat(),
+                timeMax=end.isoformat(),
                 singleEvents=True,
                 orderBy="startTime",
-                maxResults=MAX_EVENTS,
+                maxResults=max_results,
             )
             .execute(num_retries=0)
         )

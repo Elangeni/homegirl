@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import calendar as calendar_module
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pygame
 
+from homegirl import svg_icon, weathericons
 from homegirl.animation import AmbientBackground
 from homegirl.models.schedule import ScheduleEvent
 from homegirl.models.weather import HourlyForecast, WeatherData
@@ -19,6 +21,12 @@ from homegirl.theme import (
     CELEBRATION_WASH_BOTTOM_ALPHA,
     CELEBRATION_WASH_COLOR,
     CELEBRATION_WASH_TOP_ALPHA,
+    DARK_BACKGROUND_IMAGE,
+    DARK_INK,
+    DARK_MUTED,
+    DARK_WASH_BOTTOM_ALPHA,
+    DARK_WASH_COLOR,
+    DARK_WASH_TOP_ALPHA,
     DETAIL_BACKGROUND_IMAGE,
     DETAIL_BLUR_RADIUS,
     DETAIL_WASH_ALPHA,
@@ -109,6 +117,25 @@ class ReflectionViewModel:
     prompts: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class FullCalendarViewModel:
+    """Data required to render the full month calendar screen."""
+
+    time_text: str
+    today: date
+    events_by_day: dict[date, tuple[ScheduleEvent, ...]]
+
+
+@dataclass(frozen=True)
+class DayDetailViewModel:
+    """Data required to render a single day's agenda screen."""
+
+    month_label: str
+    weekday_label: str
+    date_label: str
+    events: tuple[ScheduleEvent, ...]
+
+
 class AmbientUI:
     """Render text and the weather pill that float over the ambient wallpaper."""
 
@@ -160,10 +187,10 @@ class AmbientUI:
 
         self._scale = _scale_for(surface)
         self._label_font = _font(round(15 * self._scale), 200)
-        self._name_font = _font(round(84 * self._scale), 700)
-        self._time_font = _font(round(56 * self._scale), 400)
+        self._name_font = _font(round(84 * self._scale), 200)
+        self._time_font = _font(round(144 * self._scale), 400)
         self._date_font = _font(round(20 * self._scale), 300)
-        self._national_font = _font(round(14 * self._scale), 300)
+        self._national_font = _font(round(22 * self._scale), 300)
         self.pill_label_font = _font(round(11 * self._scale), 500)
         self.pill_temp_font = _font(round(16 * self._scale), 600)
         self._fonts_ready = True
@@ -220,7 +247,7 @@ class SuggestionUI:
 
         close_size = self._spacing(12)
         self.close_rect = pygame.Rect(rect.right - self._spacing(15) - close_size, rect.top + self._spacing(15), close_size, close_size)
-        _draw_x_mark(surface, self.close_rect, INK, max(1, self._spacing(2)), alpha=ALPHA_MUTED)
+        svg_icon.draw_icon(surface, self.close_rect, "x", INK, alpha=ALPHA_MUTED)
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
         if self._fonts_ready:
@@ -308,8 +335,8 @@ class AppUI:
         if self._fonts_ready:
             return
         self._scale = _scale_for(surface)
-        self._time_font = _font(round(16 * self._scale), 300)
-        self._date_font = _font(round(12 * self._scale), 300)
+        self._time_font = _font(round(60 * self._scale), 300)
+        self._date_font = _font(round(18 * self._scale), 300)
         self._title_font = _font(round(14 * self._scale), 600)
         self._body_font = _font(round(22 * self._scale), 400)
         self._fonts_ready = True
@@ -402,7 +429,7 @@ class WeatherUI:
             icon_top = slot_top + hour_label.get_height() + self._spacing(12)
             icon_rect = pygame.Rect(0, 0, icon_size, icon_size)
             icon_rect.center = (slot_center_x, icon_top + icon_size // 2)
-            draw_condition_icon(surface, icon_rect, hour.condition, is_night=False, color=INK)
+            weathericons.draw_icon(surface, icon_rect, hour.condition, False, INK)
 
             temp_top = icon_rect.bottom + self._spacing(12)
             temp_label = _render_text(self._hour_temp_font, _format_temp(hour.temp), INK)
@@ -432,6 +459,7 @@ class CalendarUI:
         self._fonts_ready = False
         self._scale = 1.0
         self.dismiss_rect: pygame.Rect | None = None
+        self.full_calendar_rect: pygame.Rect | None = None
 
     def draw(self, surface: pygame.Surface, model: CalendarViewModel, background: AmbientBackground) -> None:
         """Draw the lead sentence, free-time hint, and today's event timeline."""
@@ -520,7 +548,7 @@ class CalendarUI:
         surface.blit(chip, rect.topleft)
 
         icon_rect = pygame.Rect(rect.left + pad_x, rect.centery - icon_size // 2, icon_size, icon_size)
-        _draw_leaf(surface, icon_rect, (138, 155, 181))
+        svg_icon.draw_icon(surface, icon_rect, "leaf", (138, 155, 181))
         surface.blit(text_image, (icon_rect.right + gap_size, rect.centery - text_image.get_height() // 2))
         return height
 
@@ -540,7 +568,8 @@ class CalendarUI:
         surface.blit(label, (rect.left + pad_x, rect.centery - label.get_height() // 2))
 
         chevron_rect = pygame.Rect(rect.right - pad_x - chevron_size, rect.centery - chevron_size // 2, chevron_size, chevron_size)
-        _draw_chevron_right(surface, chevron_rect, INK)
+        svg_icon.draw_icon(surface, chevron_rect, "chevron-right", INK)
+        self.full_calendar_rect = rect
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
         if self._fonts_ready:
@@ -716,6 +745,213 @@ class ReflectionUI:
         return round(value * self._scale)
 
 
+class FullCalendarUI:
+    """Render the full month calendar reached from the calendar detail screen."""
+
+    def __init__(self) -> None:
+        self._fonts_ready = False
+        self._scale = 1.0
+        self.day_rects: dict[date, pygame.Rect] = {}
+
+    def draw(self, surface: pygame.Surface, model: FullCalendarViewModel, background: AmbientBackground) -> None:
+        """Draw the month header, weekday row, and day grid; record each day's tap rect."""
+        self._ensure_fonts(surface)
+        background.draw_washed(surface, DARK_BACKGROUND_IMAGE, DARK_WASH_COLOR, DARK_WASH_TOP_ALPHA, DARK_WASH_BOTTOM_ALPHA)
+
+        width, height = surface.get_size()
+        margin_x = self._spacing(MARGIN_X)
+        top = self._spacing(64)
+
+        time_image = _render_text_alpha(self._time_font, model.time_text, DARK_MUTED, 204)
+        surface.blit(time_image, (margin_x, top))
+
+        month_label = model.today.strftime("%B %Y")
+        month_image = _render_text(self._month_font, month_label, DARK_INK)
+        surface.blit(month_image, (margin_x, top + time_image.get_height() + self._spacing(8)))
+
+        footer_y = height - self._spacing(48) - self._spacing(32)
+
+        weekday_y = top + time_image.get_height() + self._spacing(8) + month_image.get_height() + self._spacing(40)
+        col_gap = self._spacing(8)
+        col_width = (width - margin_x * 2 - col_gap * 6) / 7
+
+        weekday_row_height = 0
+        for index, label in enumerate(("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")):
+            text = _render_text_alpha(self._weekday_font, label, DARK_MUTED, ALPHA_SECONDARY)
+            x = margin_x + index * (col_width + col_gap) + col_width / 2
+            surface.blit(text, text.get_rect(midtop=(round(x), weekday_y)))
+            weekday_row_height = max(weekday_row_height, text.get_height())
+
+        grid_top = weekday_y + weekday_row_height + self._spacing(24)
+
+        weeks = calendar_module.Calendar(firstweekday=0).monthdayscalendar(model.today.year, model.today.month)
+        row_gap = self._spacing(8)
+        available = footer_y - self._spacing(24) - grid_top
+        row_height = max(self._spacing(60), (available - row_gap * (len(weeks) - 1)) / len(weeks))
+
+        self.day_rects = {}
+        for row_index, week in enumerate(weeks):
+            for col_index, day_num in enumerate(week):
+                if day_num == 0:
+                    continue
+                rect = pygame.Rect(
+                    round(margin_x + col_index * (col_width + col_gap)),
+                    round(grid_top + row_index * (row_height + row_gap)),
+                    round(col_width),
+                    round(row_height),
+                )
+                day_date = date(model.today.year, model.today.month, day_num)
+                is_today = day_date == model.today
+                self.day_rects[day_date] = rect
+                self._draw_day_cell(surface, rect, day_num, is_today, model.events_by_day.get(day_date, ()))
+
+        icon_rect = pygame.Rect(margin_x, footer_y, self._spacing(32), self._spacing(32))
+        _draw_icon_badge(surface, icon_rect, "x", DARK_INK, (255, 255, 255, 20))
+        hint_text = _render_text_alpha(self._hint_font, "Tap anywhere to dismiss", DARK_INK, ALPHA_MUTED)
+        surface.blit(hint_text, (icon_rect.right + self._spacing(12), footer_y + (icon_rect.height - hint_text.get_height()) // 2))
+
+    def _draw_day_cell(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        day_num: int,
+        is_today: bool,
+        events: tuple[ScheduleEvent, ...],
+    ) -> None:
+        if is_today:
+            panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(panel, (248, 250, 252, 46), panel.get_rect(), border_radius=self._spacing(12))
+            pygame.draw.rect(panel, (255, 255, 255, 89), panel.get_rect(), width=1, border_radius=self._spacing(12))
+            surface.blit(panel, rect.topleft)
+
+        pad = self._spacing(12)
+        day_font = self._today_day_font if is_today else self._day_font
+        day_text = _render_text_alpha(day_font, str(day_num), DARK_INK, ALPHA_FULL if is_today else 178)
+        surface.blit(day_text, (rect.left + pad, rect.top + pad))
+
+        y = rect.top + pad + day_text.get_height() + self._spacing(4)
+        max_width = rect.width - pad * 2
+        shown = events[:2]
+        for event in shown:
+            if y > rect.bottom - pad:
+                break
+            label = event.title if event.all_day else f"{_short_time(event.start)} {event.title}"
+            clipped = _clip_text(self._pill_font, label, max_width - self._spacing(16))
+            text_image = _render_text_alpha(self._pill_font, clipped, DARK_INK, 230)
+            pill_rect = pygame.Rect(rect.left + pad, y, max_width, text_image.get_height() + self._spacing(8))
+            pill = pygame.Surface(pill_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(pill, (255, 255, 255, 20), pill.get_rect(), border_radius=self._spacing(6))
+            surface.blit(pill, pill_rect.topleft)
+            surface.blit(text_image, (pill_rect.left + self._spacing(8), pill_rect.top + self._spacing(4)))
+            y += pill_rect.height + self._spacing(4)
+
+        extra = len(events) - len(shown)
+        if extra > 0 and y <= rect.bottom - pad:
+            more_text = _render_text_alpha(self._more_font, f"+{extra} more", DARK_MUTED, 178)
+            surface.blit(more_text, (rect.left + pad, y))
+
+        if is_today:
+            today_label = _render_text_alpha(self._today_label_font, "T O D A Y", (255, 255, 255), 128)
+            surface.blit(today_label, (rect.left + pad, rect.bottom - pad - today_label.get_height()))
+
+    def _ensure_fonts(self, surface: pygame.Surface) -> None:
+        if self._fonts_ready:
+            return
+        self._scale = _scale_for(surface)
+        self._time_font = _font(round(16 * self._scale), 500)
+        self._month_font = _font(round(64 * self._scale), 200)
+        self._weekday_font = _font(round(12 * self._scale), 600)
+        self._day_font = _font(round(24 * self._scale), 300)
+        self._today_day_font = _font(round(24 * self._scale), 600)
+        self._pill_font = _font(round(11 * self._scale), 500)
+        self._more_font = _font(round(11 * self._scale), 500)
+        self._today_label_font = _font(round(8 * self._scale), 500)
+        self._hint_font = _font(round(13 * self._scale), 400)
+        self._fonts_ready = True
+
+    def _spacing(self, value: int) -> int:
+        return round(value * self._scale)
+
+
+class DayDetailUI:
+    """Render a single day's agenda, reached by tapping a day in the full calendar."""
+
+    def __init__(self) -> None:
+        self._fonts_ready = False
+        self._scale = 1.0
+
+    def draw(self, surface: pygame.Surface, model: DayDetailViewModel, background: AmbientBackground) -> None:
+        """Draw the breadcrumb, day header, and either the agenda list or an empty state."""
+        self._ensure_fonts(surface)
+        background.draw_washed(surface, DARK_BACKGROUND_IMAGE, DARK_WASH_COLOR, DARK_WASH_TOP_ALPHA, DARK_WASH_BOTTOM_ALPHA)
+
+        width, height = surface.get_size()
+        margin_x = self._spacing(MARGIN_X)
+        top = self._spacing(64)
+
+        chevron_size = self._spacing(18)
+        chevron_rect = pygame.Rect(margin_x, top, chevron_size, chevron_size)
+        svg_icon.draw_icon(surface, chevron_rect, "chevron-left", DARK_MUTED, alpha=204)
+        breadcrumb = _render_text_alpha(self._breadcrumb_font, model.month_label, DARK_MUTED, 204)
+        surface.blit(breadcrumb, (chevron_rect.right + self._spacing(12), top + (chevron_size - breadcrumb.get_height()) // 2))
+
+        content_top = top + chevron_size + self._spacing(64)
+        weekday_image = _render_text(self._weekday_font, model.weekday_label, DARK_INK)
+        surface.blit(weekday_image, (margin_x, content_top))
+
+        date_y = content_top + weekday_image.get_height() + self._spacing(12)
+        date_image = _render_text_alpha(self._date_font, model.date_label, DARK_MUTED, 230)
+        surface.blit(date_image, (margin_x, date_y))
+
+        events_top = date_y + date_image.get_height() + self._spacing(48)
+        label_image = _render_text_alpha(self._events_label_font, "E V E N T S", DARK_MUTED, ALPHA_SECONDARY)
+        surface.blit(label_image, (margin_x, events_top))
+
+        line_y = events_top + label_image.get_height() + self._spacing(16)
+        line = pygame.Surface((width - margin_x * 2, 1), pygame.SRCALPHA)
+        line.fill((*DARK_MUTED, 51))
+        surface.blit(line, (margin_x, line_y))
+
+        list_top = line_y + self._spacing(24)
+        if not model.events:
+            empty_image = _render_text_alpha(self._empty_font, "Nothing scheduled", DARK_MUTED, ALPHA_MUTED)
+            area = pygame.Rect(margin_x, list_top, width - margin_x * 2, self._spacing(240))
+            surface.blit(empty_image, empty_image.get_rect(center=area.center))
+        else:
+            y = list_top
+            time_col_width = self._spacing(140)
+            for event in model.events:
+                time_label = "All day" if event.all_day else _short_time(event.start)
+                time_image = _render_text_alpha(self._agenda_time_font, time_label, DARK_MUTED, 178)
+                surface.blit(time_image, (margin_x, y))
+                title_image = _render_text(self._agenda_title_font, event.title, DARK_INK)
+                surface.blit(title_image, (margin_x + time_col_width, y))
+                y += max(time_image.get_height(), title_image.get_height()) + self._spacing(20)
+
+        footer_y = height - self._spacing(48) - self._spacing(32)
+        icon_rect = pygame.Rect(margin_x, footer_y, self._spacing(32), self._spacing(32))
+        _draw_dismiss_hint(surface, icon_rect, DARK_INK)
+        hint_text = _render_text_alpha(self._hint_font, "Tap anywhere to dismiss", DARK_INK, ALPHA_MUTED)
+        surface.blit(hint_text, (icon_rect.right + self._spacing(12), footer_y + (icon_rect.height - hint_text.get_height()) // 2))
+
+    def _ensure_fonts(self, surface: pygame.Surface) -> None:
+        if self._fonts_ready:
+            return
+        self._scale = _scale_for(surface)
+        self._breadcrumb_font = _font(round(16 * self._scale), 500)
+        self._weekday_font = _font(round(80 * self._scale), 200)
+        self._date_font = _font(round(40 * self._scale), 300)
+        self._events_label_font = _font(round(12 * self._scale), 600)
+        self._empty_font = _font(round(24 * self._scale), 300)
+        self._agenda_time_font = _font(round(18 * self._scale), 400)
+        self._agenda_title_font = _font(round(20 * self._scale), 500)
+        self._hint_font = _font(round(13 * self._scale), 400)
+        self._fonts_ready = True
+
+    def _spacing(self, value: int) -> int:
+        return round(value * self._scale)
+
+
 def draw_weather_pill(surface: pygame.Surface, ui: AmbientUI, weather: WeatherData, theme: Theme) -> None:
     """Draw the frosted weather pill shared by the ambient and suggestion screens."""
     if not weather.is_available:
@@ -742,7 +978,7 @@ def draw_weather_pill(surface: pygame.Surface, ui: AmbientUI, weather: WeatherDa
     _draw_glass_panel(surface, rect, rect.height // 2, theme.pill_bg, theme.pill_border)
 
     icon_rect = pygame.Rect(rect.left + pad_x, rect.centery - icon_size // 2, icon_size, icon_size)
-    draw_condition_icon(surface, icon_rect, weather.condition, theme.is_dark, theme.pill_text)
+    weathericons.draw_icon(surface, icon_rect, weather.condition, theme.is_dark, theme.pill_text)
 
     text_x = icon_rect.right + gap
     text_y = rect.centery - text_height // 2
@@ -771,8 +1007,42 @@ def _draw_dismiss_button(surface: pygame.Surface, right_x: int, top_y: int, size
     circle_rect = pygame.Rect(0, 0, circle_size, circle_size)
     circle_rect.center = rect.center
     pygame.draw.circle(surface, INK, circle_rect.center, circle_size // 2, width=max(1, round(size * 0.06)))
-    _draw_x_mark(surface, circle_rect, INK, max(1, round(size * 0.06)), alpha=ALPHA_FULL, inset=0.32)
+    icon_rect = circle_rect.inflate(-round(circle_size * 0.64), -round(circle_size * 0.64))
+    svg_icon.draw_icon(surface, icon_rect, "x", INK)
     return rect
+
+
+def _draw_dismiss_hint(surface: pygame.Surface, rect: pygame.Rect, ink_color: tuple[int, int, int]) -> None:
+    """Draw a non-interactive bordered dismiss glyph, used where any tap dismisses the screen."""
+    pygame.draw.circle(surface, ink_color, rect.center, rect.width // 2, width=max(1, round(rect.width * 0.06)))
+    icon_rect = rect.inflate(-round(rect.width * 0.64), -round(rect.width * 0.64))
+    svg_icon.draw_icon(surface, icon_rect, "x", ink_color)
+
+
+def _draw_icon_badge(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    icon_name: str,
+    ink_color: tuple[int, int, int],
+    bg_rgba: tuple[int, int, int, int],
+) -> None:
+    """Draw a filled rounded badge containing a small centered icon."""
+    panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(panel, bg_rgba, panel.get_rect(), border_radius=rect.width // 2)
+    surface.blit(panel, rect.topleft)
+    icon_rect = rect.inflate(-round(rect.width * 0.56), -round(rect.width * 0.56))
+    svg_icon.draw_icon(surface, icon_rect, icon_name, ink_color)
+
+
+def _clip_text(font: pygame.font.Font, text: str, max_width: int) -> str:
+    """Shorten text with a trailing ellipsis so it fits within max_width."""
+    if font.size(text)[0] <= max_width:
+        return text
+
+    clipped = text
+    while clipped and font.size(clipped + "…")[0] > max_width:
+        clipped = clipped[:-1]
+    return f"{clipped}…" if clipped else "…"
 
 
 def _build_timeline_items(
@@ -806,32 +1076,6 @@ def _generate_confetti() -> list[tuple[float, float, int, tuple[int, int, int]]]
         size = rng.choice((4, 5, 6, 8))
         dots.append((fx, fy, size, rng.choice(colors)))
     return dots
-
-
-def _draw_leaf(surface: pygame.Surface, rect: pygame.Rect, color: tuple[int, int, int]) -> None:
-    points = [
-        (rect.left, rect.centery),
-        (rect.centerx, rect.top),
-        (rect.right, rect.centery),
-        (rect.centerx, rect.bottom),
-    ]
-    pygame.draw.polygon(surface, color, points, width=max(1, round(rect.width * 0.12)))
-    pygame.draw.line(surface, color, (rect.left, rect.centery), (rect.right, rect.centery), max(1, round(rect.width * 0.1)))
-
-
-def _draw_chevron_right(surface: pygame.Surface, rect: pygame.Rect, color: tuple[int, int, int]) -> None:
-    width = max(1, round(rect.width * 0.14))
-    pygame.draw.lines(
-        surface,
-        color,
-        False,
-        [
-            (rect.left + rect.width * 0.3, rect.top),
-            (rect.right - rect.width * 0.2, rect.centery),
-            (rect.left + rect.width * 0.3, rect.bottom),
-        ],
-        width,
-    )
 
 
 def _draw_glass_panel(
@@ -935,119 +1179,3 @@ def _wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
     return lines
 
 
-def _draw_x_mark(
-    surface: pygame.Surface,
-    rect: pygame.Rect,
-    color: tuple[int, int, int],
-    thickness: int,
-    alpha: int = 255,
-    inset: float = 0.3,
-) -> None:
-    """Draw a small dismiss glyph centered in rect."""
-    layer = pygame.Surface(rect.size, pygame.SRCALPHA)
-    local = layer.get_rect()
-    margin = round(local.width * inset)
-    pygame.draw.line(layer, (*color, alpha), (margin, margin), (local.width - margin, local.height - margin), max(1, thickness))
-    pygame.draw.line(layer, (*color, alpha), (local.width - margin, margin), (margin, local.height - margin), max(1, thickness))
-    surface.blit(layer, rect.topleft)
-
-
-def _condition_category(condition: str | None) -> str:
-    """Classify condition text into a coarse icon category."""
-    text = (condition or "").lower()
-    if "thunder" in text or "storm" in text:
-        return "thunder"
-    if "snow" in text or "sleet" in text or "ice" in text:
-        return "snow"
-    if "rain" in text or "drizzle" in text or "shower" in text:
-        return "rain"
-    if "fog" in text or "mist" in text or "haze" in text:
-        return "fog"
-    if "partly" in text or "partial" in text:
-        return "partly-cloudy"
-    if "cloud" in text or "overcast" in text:
-        return "cloud"
-    return "clear"
-
-
-def draw_condition_icon(
-    surface: pygame.Surface,
-    rect: pygame.Rect,
-    condition: str | None,
-    is_night: bool,
-    color: tuple[int, int, int],
-) -> None:
-    """Draw a simple hand-drawn glyph for a weather condition, day or night."""
-    category = _condition_category(condition)
-    width = max(1, round(rect.width * 0.08))
-
-    if category == "clear":
-        if is_night:
-            _draw_moon(surface, rect, color)
-        else:
-            _draw_sun(surface, rect, color, width)
-        return
-
-    if category == "partly-cloudy" and not is_night:
-        accent_rect = pygame.Rect(0, 0, round(rect.width * 0.5), round(rect.height * 0.5))
-        accent_rect.center = (round(rect.centerx - rect.width * 0.02), round(rect.top + rect.height * 0.22))
-        _draw_sun(surface, accent_rect, color, max(1, round(width * 0.8)))
-
-    cloud_rect = pygame.Rect(0, 0, round(rect.width * 0.8), round(rect.height * 0.5))
-    cloud_rect.center = (rect.centerx, rect.centery + round(rect.height * 0.08))
-    pygame.draw.ellipse(surface, color, cloud_rect, width=width)
-
-    if category in ("cloud", "partly-cloudy", "snow"):
-        return
-
-    if category == "fog":
-        for offset in (0.12, 0.3):
-            y = cloud_rect.bottom + round(rect.height * offset)
-            pygame.draw.line(surface, color, (rect.left, y), (rect.right, y), width)
-        return
-
-    if category == "rain":
-        for offset in (-0.2, 0.0, 0.2):
-            x = rect.centerx + round(offset * rect.width)
-            top = cloud_rect.bottom + round(rect.height * 0.05)
-            bottom = top + round(rect.height * 0.22)
-            pygame.draw.line(surface, color, (x, top), (x - round(rect.width * 0.08), bottom), width)
-        return
-
-    if category == "thunder":
-        bolt_top = (rect.centerx + round(rect.width * 0.08), cloud_rect.bottom)
-        bolt_mid = (rect.centerx - round(rect.width * 0.08), rect.centery + round(rect.height * 0.18))
-        bolt_bottom = (rect.centerx + round(rect.width * 0.02), rect.bottom)
-        pygame.draw.lines(surface, color, False, [bolt_top, bolt_mid, bolt_bottom], width)
-
-
-def _draw_sun(surface: pygame.Surface, rect: pygame.Rect, color: tuple[int, int, int], width: int) -> None:
-    radius = round(rect.width * 0.28)
-    pygame.draw.circle(surface, color, rect.center, radius, width=width)
-    ray_length = round(rect.width * 0.16)
-    for angle in range(0, 360, 45):
-        import math
-
-        radians = math.radians(angle)
-        inner = (
-            rect.centerx + round((radius + width) * math.cos(radians)),
-            rect.centery + round((radius + width) * math.sin(radians)),
-        )
-        outer = (
-            rect.centerx + round((radius + width + ray_length) * math.cos(radians)),
-            rect.centery + round((radius + width + ray_length) * math.sin(radians)),
-        )
-        pygame.draw.line(surface, color, inner, outer, width)
-
-
-def _draw_moon(surface: pygame.Surface, rect: pygame.Rect, color: tuple[int, int, int]) -> None:
-    radius = round(rect.width * 0.34)
-    shadow_offset = round(radius * 0.55)
-    pad = radius + shadow_offset + 2
-    size = pad * 2
-    moon = pygame.Surface((size, size), pygame.SRCALPHA)
-    center = (pad, pad)
-    pygame.draw.circle(moon, color, center, radius)
-    pygame.draw.circle(moon, (0, 0, 0, 0), (center[0] + shadow_offset, center[1] - shadow_offset), radius)
-    moon_rect = moon.get_rect(center=rect.center)
-    surface.blit(moon, moon_rect.topleft)
