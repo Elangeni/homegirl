@@ -41,7 +41,7 @@ Environment variables:
 - `GOOGLE_CALENDAR_ID`: which calendar to read. Defaults to `primary` (your main calendar).
 - `GOOGLE_CALENDAR_TOKEN_FILE`: filename for the stored OAuth refresh token. Defaults to `google_calendar_token.json` in the project root.
 - `HOMEGIRL_SPEAKER_DEVICE_MATCH`: case-insensitive substring used to pick the audio output device (e.g. `USB` to prefer a USB speaker over HDMI audio outputs). Defaults to `USB`; set empty to use the system default device.
-- `HOMEGIRL_VOICE_MODEL_FILE`: path (relative to the project root) to the Piper `.onnx` voice model used for the startup greeting. Defaults to `voices/en_US-lessac-medium.onnx`. See "Sound" below.
+- `HOMEGIRL_VOICE_MODEL_FILE`: path (relative to the project root) to the Piper `.onnx` voice model used for the startup greeting. Defaults to `voices/en_US-hfc_female-medium.onnx`. See "Sound" below.
 
 The National Day client tries `https://api.nationaldaysapi.com/v1/date` first, then a quiet fallback endpoint if needed. It fetches in a background thread, caches the result in memory, and refreshes only once per local calendar day. If the requests fail or the responses cannot be parsed, the line is hidden.
 
@@ -82,10 +82,10 @@ Audio output picks a device matching `HOMEGIRL_SPEAKER_DEVICE_MATCH` (see above)
 
 ```bash
 pip install piper-tts
-python3 -m piper.download_voices en_US-lessac-medium --download-dir voices
+python3 -m piper.download_voices en_US-hfc_female-medium --download-dir voices
 ```
 
-That downloads `voices/en_US-lessac-medium.onnx` and its `.onnx.json` config — the path `Settings.voice_model_path` expects by default. Both files are gitignored (they're large binary models, not source).
+That downloads `voices/en_US-hfc_female-medium.onnx` and its `.onnx.json` config — the path `Settings.voice_model_path` expects by default. Both files are gitignored (they're large binary models, not source).
 
 ## Architecture
 

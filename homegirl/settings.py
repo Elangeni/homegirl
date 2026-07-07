@@ -28,7 +28,7 @@ class Settings:
     google_calendar_timeout_seconds: float = 4.0
     fullscreen: bool = True
     speaker_device_match: str | None = "USB"
-    voice_model_file: str = "voices/en_US-lessac-medium.onnx"
+    voice_model_file: str = "voices/en_US-hfc_female-medium.onnx"
     greeting_cache_file: str = "greeting_cache.wav"
 
     @property
