@@ -42,6 +42,7 @@ Environment variables:
 - `GOOGLE_CALENDAR_TOKEN_FILE`: filename for the stored OAuth refresh token. Defaults to `google_calendar_token.json` in the project root.
 - `HOMEGIRL_SPEAKER_DEVICE_MATCH`: case-insensitive substring used to pick the audio output device (e.g. `USB` to prefer a USB speaker over HDMI audio outputs). Defaults to `USB`; set empty to use the system default device.
 - `HOMEGIRL_VOICE_MODEL_FILE`: path (relative to the project root) to the Piper `.onnx` voice model used for the startup greeting. Defaults to `voices/en_US-hfc_female-medium.onnx`. See "Sound" below.
+- `ANTHROPIC_API_KEY`: Claude API key used for the conversational brain. If missing, the brain stays unavailable and any features that depend on it silently no-op. See "Brain" below.
 
 The National Day client tries `https://api.nationaldaysapi.com/v1/date` first, then a quiet fallback endpoint if needed. It fetches in a background thread, caches the result in memory, and refreshes only once per local calendar day. If the requests fail or the responses cannot be parsed, the line is hidden.
 
@@ -87,6 +88,20 @@ python3 -m piper.download_voices en_US-hfc_female-medium --download-dir voices
 
 That downloads `voices/en_US-hfc_female-medium.onnx` and its `.onnx.json` config — the path `Settings.voice_model_path` expects by default. Both files are gitignored (they're large binary models, not source).
 
+## Brain
+
+`homegirl/brain.py` wraps the Claude API (`claude-opus-4-8`) with Homegirl's persona — warm, occasionally a dad joke, and the one leading a compassionate weekly reflection (see `homegirl/reflection.py` for the prompts). It keeps a running in-memory conversation history for the session; nothing is persisted across restarts yet.
+
+The brain is cloud-based (needs `ANTHROPIC_API_KEY` and internet), unlike the offline Piper voice — a deliberate tradeoff: real conversational quality mattered more here than staying fully offline. If `ANTHROPIC_API_KEY` isn't set, `Brain.is_available` is `False` and `reply()` returns `None` rather than raising.
+
+There's no mic (ears) yet, so nothing in the app currently calls the brain. Until then, test it with keyboard input as a stand-in for voice:
+
+```bash
+python tools/chat_with_brain.py
+```
+
+This chats with Homegirl via the terminal and speaks each reply aloud through the same Piper + speaker pipeline used for the startup greeting — proving the brain and speech work end-to-end, with only ears left to wire up.
+
 ## Architecture
 
 - `homegirl/app.py`: pygame lifecycle and main loop
@@ -103,6 +118,7 @@ That downloads `voices/en_US-hfc_female-medium.onnx` and its `.onnx.json` config
 - `homegirl/theme.py`: time-of-day palettes and animation colors
 - `homegirl/audio.py`: sound effect playback through a chosen output device
 - `homegirl/speech.py`: Piper text-to-speech synthesis
+- `homegirl/brain.py`: Claude-powered conversational brain
 - `homegirl/ui.py`: ambient and app screen rendering
 - `homegirl/settings.py`: runtime configuration
 - `homegirl/transition.py`: screen transition timing and easing
