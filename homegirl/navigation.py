@@ -38,6 +38,7 @@ class WakeController:
 
     @property
     def screen(self) -> Screen:
+        """Return the currently active top-level screen."""
         return self._screen
 
     def show(self, screen: Screen) -> None:

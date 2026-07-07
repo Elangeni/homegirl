@@ -173,8 +173,10 @@ class CalendarService:
         http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=self._timeout_seconds))
         service = build("calendar", "v3", http=http, cache_discovery=False)
 
+        # service.events() is built dynamically at runtime from Google's API
+        # discovery document, so pylint can't see it statically.
         response = (
-            service.events()
+            service.events()  # pylint: disable=no-member
             .list(
                 calendarId=self._calendar_id,
                 timeMin=start.isoformat(),
