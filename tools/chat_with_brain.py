@@ -7,12 +7,20 @@ Stand-in for voice input until the mic (ears) is wired up:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# pylint: disable=wrong-import-position
 from dotenv import load_dotenv
 
 from homegirl.audio import AudioPlayer
 from homegirl.brain import Brain
 from homegirl.settings import Settings
 from homegirl.speech import SpeechSynthesizer
+
+# pylint: enable=wrong-import-position
 
 
 def main() -> None:

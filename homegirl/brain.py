@@ -8,7 +8,7 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-opus-4-8"
+MODEL = "claude-sonnet-5"
 MAX_TOKENS = 1024
 
 SYSTEM_PROMPT_TEMPLATE = """You are Homegirl, a warm home companion who lives in an ambient \
@@ -52,6 +52,7 @@ class Brain:
                 max_tokens=MAX_TOKENS,
                 system=self._system,
                 messages=self._messages,
+                thinking={"type": "disabled"},
             )
         except Exception:
             logger.exception("Claude API call failed")
