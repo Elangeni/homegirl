@@ -15,7 +15,10 @@ WashCacheKey = tuple[str, tuple[int, int], tuple[int, int, int], int, int, int]
 class AmbientBackground:
     """Load, scale, and cache static wallpaper photos for full-screen backdrops."""
 
-    def __init__(self, quality_scale: float = 0.5) -> None:
+    # quality_scale is accepted (and set via Settings.animation_quality_scale)
+    # for forward compatibility with quality tiering, but static wallpapers
+    # don't have a quality knob to apply it to yet.
+    def __init__(self, quality_scale: float = 0.5) -> None:  # pylint: disable=unused-argument
         self._assets_dir = Path(__file__).resolve().parent.parent / "assets" / "backgrounds"
         self._source_cache: dict[str, pygame.Surface] = {}
         self._scaled_cache: dict[tuple[str, tuple[int, int]], pygame.Surface] = {}

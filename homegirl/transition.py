@@ -16,23 +16,28 @@ class ScreenTransition:
 
     @property
     def is_active(self) -> bool:
+        """Return whether a transition is currently in progress."""
         return self._source_screen is not None
 
     @property
     def source_screen(self) -> Screen:
+        """Return the screen being transitioned away from."""
         return self._source_screen or self._target_screen
 
     @property
     def target_screen(self) -> Screen:
+        """Return the screen being transitioned to."""
         return self._target_screen
 
     @property
     def progress(self) -> float:
+        """Return eased transition progress from 0.0 to 1.0."""
         raw_progress = min(1.0, self._elapsed_seconds / self._duration_seconds)
         return _ease_in_out(raw_progress)
 
     @property
     def target_alpha(self) -> int:
+        """Return the target screen's current crossfade alpha (0-255)."""
         return round(255 * self.progress)
 
     def update(self, target_screen: Screen, delta_seconds: float) -> None:

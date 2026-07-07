@@ -143,6 +143,11 @@ class AmbientUI:
         self._fonts_ready = False
         self._scale = 1.0
 
+    @property
+    def scale(self) -> float:
+        """Return the current display scale factor, for callers like draw_weather_pill."""
+        return self._scale
+
     def draw(self, surface: pygame.Surface, model: AmbientViewModel, theme: Theme) -> None:
         """Draw ambient text with a left-aligned art-frame layout."""
         self._ensure_fonts(surface)
@@ -246,7 +251,12 @@ class SuggestionUI:
         self.dismiss_rect = pygame.Rect(dismiss_x, y, dismiss_image.get_width(), dismiss_image.get_height())
 
         close_size = self._spacing(12)
-        self.close_rect = pygame.Rect(rect.right - self._spacing(15) - close_size, rect.top + self._spacing(15), close_size, close_size)
+        self.close_rect = pygame.Rect(
+            rect.right - self._spacing(15) - close_size,
+            rect.top + self._spacing(15),
+            close_size,
+            close_size,
+        )
         svg_icon.draw_icon(surface, self.close_rect, "x", INK, alpha=ALPHA_MUTED)
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
@@ -490,7 +500,10 @@ class CalendarUI:
 
         timeline_top = y + self._spacing(48)
         timeline_bottom = height - self._spacing(PANEL_PAD_BOTTOM) - self._spacing(48)
-        self._draw_timeline(surface, model, pygame.Rect(margin_x, timeline_top, width - margin_x * 2, max(0, timeline_bottom - timeline_top)))
+        timeline_rect = pygame.Rect(
+            margin_x, timeline_top, width - margin_x * 2, max(0, timeline_bottom - timeline_top)
+        )
+        self._draw_timeline(surface, model, timeline_rect)
 
         button_y = height - self._spacing(PANEL_PAD_BOTTOM)
         self._draw_full_calendar_button(surface, width - margin_x, button_y)
@@ -567,7 +580,12 @@ class CalendarUI:
         surface.blit(button, rect.topleft)
         surface.blit(label, (rect.left + pad_x, rect.centery - label.get_height() // 2))
 
-        chevron_rect = pygame.Rect(rect.right - pad_x - chevron_size, rect.centery - chevron_size // 2, chevron_size, chevron_size)
+        chevron_rect = pygame.Rect(
+            rect.right - pad_x - chevron_size,
+            rect.centery - chevron_size // 2,
+            chevron_size,
+            chevron_size,
+        )
         svg_icon.draw_icon(surface, chevron_rect, "chevron-right", INK)
         self.full_calendar_rect = rect
 
@@ -596,7 +614,14 @@ class CelebrationUI:
         self._scale = 1.0
         self._confetti: list[tuple[float, float, int, tuple[int, int, int]]] | None = None
 
-    def draw(self, surface: pygame.Surface, headline: str, subtext: str, date_text: str, background: AmbientBackground) -> None:
+    def draw(
+        self,
+        surface: pygame.Surface,
+        headline: str,
+        subtext: str,
+        date_text: str,
+        background: AmbientBackground,
+    ) -> None:
         """Draw the warm celebratory backdrop, confetti, and centered message."""
         self._ensure_fonts(surface)
         background.draw_washed(
@@ -756,7 +781,9 @@ class FullCalendarUI:
     def draw(self, surface: pygame.Surface, model: FullCalendarViewModel, background: AmbientBackground) -> None:
         """Draw the month header, weekday row, and day grid; record each day's tap rect."""
         self._ensure_fonts(surface)
-        background.draw_washed(surface, DARK_BACKGROUND_IMAGE, DARK_WASH_COLOR, DARK_WASH_TOP_ALPHA, DARK_WASH_BOTTOM_ALPHA)
+        background.draw_washed(
+            surface, DARK_BACKGROUND_IMAGE, DARK_WASH_COLOR, DARK_WASH_TOP_ALPHA, DARK_WASH_BOTTOM_ALPHA
+        )
 
         width, height = surface.get_size()
         margin_x = self._spacing(MARGIN_X)
@@ -808,7 +835,10 @@ class FullCalendarUI:
         icon_rect = pygame.Rect(margin_x, footer_y, self._spacing(32), self._spacing(32))
         _draw_icon_badge(surface, icon_rect, "x", DARK_INK, (255, 255, 255, 20))
         hint_text = _render_text_alpha(self._hint_font, "Tap anywhere to dismiss", DARK_INK, ALPHA_MUTED)
-        surface.blit(hint_text, (icon_rect.right + self._spacing(12), footer_y + (icon_rect.height - hint_text.get_height()) // 2))
+        surface.blit(
+            hint_text,
+            (icon_rect.right + self._spacing(12), footer_y + (icon_rect.height - hint_text.get_height()) // 2),
+        )
 
     def _draw_day_cell(
         self,
@@ -883,7 +913,9 @@ class DayDetailUI:
     def draw(self, surface: pygame.Surface, model: DayDetailViewModel, background: AmbientBackground) -> None:
         """Draw the breadcrumb, day header, and either the agenda list or an empty state."""
         self._ensure_fonts(surface)
-        background.draw_washed(surface, DARK_BACKGROUND_IMAGE, DARK_WASH_COLOR, DARK_WASH_TOP_ALPHA, DARK_WASH_BOTTOM_ALPHA)
+        background.draw_washed(
+            surface, DARK_BACKGROUND_IMAGE, DARK_WASH_COLOR, DARK_WASH_TOP_ALPHA, DARK_WASH_BOTTOM_ALPHA
+        )
 
         width, height = surface.get_size()
         margin_x = self._spacing(MARGIN_X)
@@ -893,7 +925,10 @@ class DayDetailUI:
         chevron_rect = pygame.Rect(margin_x, top, chevron_size, chevron_size)
         svg_icon.draw_icon(surface, chevron_rect, "chevron-left", DARK_MUTED, alpha=204)
         breadcrumb = _render_text_alpha(self._breadcrumb_font, model.month_label, DARK_MUTED, 204)
-        surface.blit(breadcrumb, (chevron_rect.right + self._spacing(12), top + (chevron_size - breadcrumb.get_height()) // 2))
+        surface.blit(
+            breadcrumb,
+            (chevron_rect.right + self._spacing(12), top + (chevron_size - breadcrumb.get_height()) // 2),
+        )
 
         content_top = top + chevron_size + self._spacing(64)
         weekday_image = _render_text(self._weekday_font, model.weekday_label, DARK_INK)
@@ -932,7 +967,10 @@ class DayDetailUI:
         icon_rect = pygame.Rect(margin_x, footer_y, self._spacing(32), self._spacing(32))
         _draw_dismiss_hint(surface, icon_rect, DARK_INK)
         hint_text = _render_text_alpha(self._hint_font, "Tap anywhere to dismiss", DARK_INK, ALPHA_MUTED)
-        surface.blit(hint_text, (icon_rect.right + self._spacing(12), footer_y + (icon_rect.height - hint_text.get_height()) // 2))
+        surface.blit(
+            hint_text,
+            (icon_rect.right + self._spacing(12), footer_y + (icon_rect.height - hint_text.get_height()) // 2),
+        )
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
         if self._fonts_ready:
@@ -962,17 +1000,17 @@ def draw_weather_pill(surface: pygame.Surface, ui: AmbientUI, weather: WeatherDa
     label_image = _render_text_alpha(ui.pill_label_font, label, theme.pill_text, theme.pill_label_alpha)
     temp_image = _render_text_alpha(ui.pill_temp_font, temp, theme.pill_text, round(theme.pill_label_alpha * 0.8))
 
-    pad_x = round(16 * ui._scale)
-    pad_y = round(12 * ui._scale)
-    icon_size = round(32 * ui._scale)
-    gap = round(12 * ui._scale)
+    pad_x = round(16 * ui.scale)
+    pad_y = round(12 * ui.scale)
+    icon_size = round(32 * ui.scale)
+    gap = round(12 * ui.scale)
     text_width = max(label_image.get_width(), temp_image.get_width())
-    text_height = label_image.get_height() + round(2 * ui._scale) + temp_image.get_height()
+    text_height = label_image.get_height() + round(2 * ui.scale) + temp_image.get_height()
 
     width = pad_x * 2 + icon_size + gap + text_width
     height = pad_y * 2 + max(icon_size, text_height)
-    right_margin = round(24 * ui._scale)
-    top_margin = round(40 * ui._scale)
+    right_margin = round(24 * ui.scale)
+    top_margin = round(40 * ui.scale)
     rect = pygame.Rect(surface.get_width() - right_margin - width, top_margin, width, height)
 
     _draw_glass_panel(surface, rect, rect.height // 2, theme.pill_bg, theme.pill_border)
@@ -983,7 +1021,7 @@ def draw_weather_pill(surface: pygame.Surface, ui: AmbientUI, weather: WeatherDa
     text_x = icon_rect.right + gap
     text_y = rect.centery - text_height // 2
     surface.blit(label_image, (text_x, text_y))
-    surface.blit(temp_image, (text_x, text_y + label_image.get_height() + round(2 * ui._scale)))
+    surface.blit(temp_image, (text_x, text_y + label_image.get_height() + round(2 * ui.scale)))
 
 
 def _draw_detail_backdrop(surface: pygame.Surface, background: AmbientBackground) -> None:
@@ -1177,5 +1215,3 @@ def _wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
         lines.append(current)
 
     return lines
-
-

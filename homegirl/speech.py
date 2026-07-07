@@ -33,6 +33,7 @@ class SpeechSynthesizer:
 
     @property
     def is_available(self) -> bool:
+        """Return whether a Piper voice loaded successfully."""
         return self._voice is not None
 
     def synthesize_to_file(self, text: str, out_path: Path) -> bool:

@@ -60,14 +60,19 @@ def _write_chime(notes: list[tuple[float, float, float]], path: Path) -> None:
     frames = b"".join(
         struct.pack("<h", int(max(-1.0, min(1.0, sample / peak)) * 32767)) for sample in mix
     )
-    with wave.open(str(path), "w") as wav_file:
+    # pylint can't resolve wave.open()'s mode-based overload, so it infers
+    # Wave_read here instead of Wave_write; this is genuinely a Wave_write.
+    # pylint: disable=no-member
+    with wave.open(str(path), "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(SAMPLE_RATE)
         wav_file.writeframes(frames)
+    # pylint: enable=no-member
 
 
 def main() -> None:
+    """Write all configured chime WAV files to assets/sounds/."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for filename, notes in CHIMES.items():
         out_path = OUTPUT_DIR / filename

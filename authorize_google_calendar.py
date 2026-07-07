@@ -23,6 +23,7 @@ from homegirl.settings import Settings
 
 
 def main() -> None:
+    """Run the one-time OAuth consent flow and write the refresh token to disk."""
     load_dotenv()
     settings = Settings.from_environment()
 

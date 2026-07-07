@@ -26,6 +26,7 @@ class FreeTimeGap:
 
     @property
     def duration_minutes(self) -> int:
+        """Return the gap's length in whole minutes."""
         return round((self.end - self.start).total_seconds() / 60)
 
 

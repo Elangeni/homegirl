@@ -49,6 +49,7 @@ class AudioPlayer:
 
     @property
     def is_available(self) -> bool:
+        """Return whether the mixer initialized successfully."""
         return pygame.mixer.get_init() is not None
 
     def play(self, path: Path) -> None:
