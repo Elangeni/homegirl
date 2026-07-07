@@ -1,6 +1,7 @@
 pygame-ce>=2.5.0
 requests>=2.32.0
 python-dotenv>=1.0.0
+piper-tts>=1.4.0
 google-auth>=2.32.0
 google-auth-oauthlib>=1.2.0
 google-auth-httplib2>=0.2.0

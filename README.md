@@ -40,6 +40,8 @@ Environment variables:
 - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`: OAuth client credentials used to read your Google Calendar. See "Google Calendar setup" below.
 - `GOOGLE_CALENDAR_ID`: which calendar to read. Defaults to `primary` (your main calendar).
 - `GOOGLE_CALENDAR_TOKEN_FILE`: filename for the stored OAuth refresh token. Defaults to `google_calendar_token.json` in the project root.
+- `HOMEGIRL_SPEAKER_DEVICE_MATCH`: case-insensitive substring used to pick the audio output device (e.g. `USB` to prefer a USB speaker over HDMI audio outputs). Defaults to `USB`; set empty to use the system default device.
+- `HOMEGIRL_VOICE_MODEL_FILE`: path (relative to the project root) to the Piper `.onnx` voice model used for the startup greeting. Defaults to `voices/en_US-lessac-medium.onnx`. See "Sound" below.
 
 The National Day client tries `https://api.nationaldaysapi.com/v1/date` first, then a quiet fallback endpoint if needed. It fetches in a background thread, caches the result in memory, and refreshes only once per local calendar day. If the requests fail or the responses cannot be parsed, the line is hidden.
 
@@ -67,6 +69,24 @@ The background is loaded from static PNG artwork in `assets/backgrounds/`. The t
 - Evening: 17:00-20:59
 - Night: 21:00-04:59
 
+## Sound
+
+Homegirl plays two kinds of sound through the speaker:
+
+- A short chime whenever the daypart changes (morning/afternoon/evening/night), generated procedurally — see `tools/generate_chimes.py`, output lives in `assets/sounds/`.
+- A spoken greeting once at app startup ("Good afternoon, Elangeni."), synthesized on-device with [Piper](https://github.com/OHF-Voice/piper1-gpl). Runs on a background thread so model loading/synthesis doesn't delay the first frame; if the voice model isn't installed, the greeting is silently skipped.
+
+Audio output picks a device matching `HOMEGIRL_SPEAKER_DEVICE_MATCH` (see above) so it plays through a USB speaker rather than defaulting to HDMI audio.
+
+### Piper setup
+
+```bash
+pip install piper-tts
+python3 -m piper.download_voices en_US-lessac-medium --download-dir voices
+```
+
+That downloads `voices/en_US-lessac-medium.onnx` and its `.onnx.json` config — the path `Settings.voice_model_path` expects by default. Both files are gitignored (they're large binary models, not source).
+
 ## Architecture
 
 - `homegirl/app.py`: pygame lifecycle and main loop
@@ -81,6 +101,8 @@ The background is loaded from static PNG artwork in `assets/backgrounds/`. The t
 - `homegirl/services/calendar.py`: Google Calendar OAuth, fetching, caching, and errors
 - `homegirl/schedule_insight.py`: rule-based schedule summary text
 - `homegirl/theme.py`: time-of-day palettes and animation colors
+- `homegirl/audio.py`: sound effect playback through a chosen output device
+- `homegirl/speech.py`: Piper text-to-speech synthesis
 - `homegirl/ui.py`: ambient and app screen rendering
 - `homegirl/settings.py`: runtime configuration
 - `homegirl/transition.py`: screen transition timing and easing

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import date, datetime
 
 import pygame
 
 from homegirl.animation import AmbientBackground
+from homegirl.audio import AudioPlayer
 from homegirl.clock import format_date, format_time, now_local
-from homegirl.greeting import get_daypart, get_greeting
+from homegirl.greeting import Daypart, get_daypart, get_greeting
+from homegirl.speech import SpeechSynthesizer
 from homegirl.models.schedule import ScheduleData
 from homegirl.models.weather import WeatherData
 from homegirl.national_day import NationalDayClient
@@ -57,6 +60,13 @@ SCREEN_TRANSITION_SECONDS = 0.45
 CELEBRATION_DEMO_HEADLINE = "Finished the sewing project."
 CELEBRATION_DEMO_SUBTEXT = "Nice one."
 
+DAYPART_CHIME_FILES: dict[Daypart, str] = {
+    Daypart.MORNING: "daypart_morning.wav",
+    Daypart.AFTERNOON: "daypart_afternoon.wav",
+    Daypart.EVENING: "daypart_evening.wav",
+    Daypart.NIGHT: "daypart_night.wav",
+}
+
 
 class HomegirlApp:
     """Fullscreen ambient smart-display application."""
@@ -93,6 +103,13 @@ class HomegirlApp:
             pygame.mouse.set_visible(False)
 
             clock = pygame.time.Clock()
+            audio = AudioPlayer(self._settings.speaker_device_match)
+            previous_daypart = get_daypart(now_local())
+            threading.Thread(
+                target=self._play_startup_greeting,
+                args=(audio,),
+                daemon=True,
+            ).start()
             background = AmbientBackground(self._settings.animation_quality_scale)
             ambient_ui = AmbientUI()
             suggestion_ui = SuggestionUI()
@@ -127,6 +144,9 @@ class HomegirlApp:
 
                 moment = now_local()
                 daypart = get_daypart(moment)
+                if daypart != previous_daypart:
+                    audio.play(self._settings.sounds_dir / DAYPART_CHIME_FILES[daypart])
+                    previous_daypart = daypart
                 theme = get_theme(daypart)
                 weather = self._weather.get_weather(moment)
                 schedule = self._calendar.get_schedule(moment)
@@ -184,6 +204,19 @@ class HomegirlApp:
                 pygame.display.flip()
         finally:
             pygame.quit()
+
+    def _play_startup_greeting(self, audio: AudioPlayer) -> None:
+        """Speak a one-time greeting on a background thread.
+
+        Runs off the main thread since loading the Piper model and
+        synthesizing can take a moment; the render loop shouldn't wait on it.
+        """
+        speech = SpeechSynthesizer(self._settings.voice_model_path)
+        if not speech.is_available:
+            return
+        greeting_text = f"{get_greeting(now_local())}, {self._settings.user_name}."
+        if speech.synthesize_to_file(greeting_text, self._settings.greeting_cache_path):
+            audio.play(self._settings.greeting_cache_path)
 
     def _draw_screen(
         self,

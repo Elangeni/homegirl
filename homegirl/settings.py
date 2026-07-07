@@ -27,6 +27,9 @@ class Settings:
     google_calendar_token_file: str = "google_calendar_token.json"
     google_calendar_timeout_seconds: float = 4.0
     fullscreen: bool = True
+    speaker_device_match: str | None = "USB"
+    voice_model_file: str = "voices/en_US-lessac-medium.onnx"
+    greeting_cache_file: str = "greeting_cache.wav"
 
     @property
     def assets_dir(self) -> Path:
@@ -34,9 +37,24 @@ class Settings:
         return self.base_dir / "assets"
 
     @property
+    def sounds_dir(self) -> Path:
+        """Return the folder for sound effect assets."""
+        return self.assets_dir / "sounds"
+
+    @property
     def google_calendar_token_path(self) -> Path:
         """Return where the Google Calendar OAuth refresh token is stored."""
         return self.base_dir / self.google_calendar_token_file
+
+    @property
+    def voice_model_path(self) -> Path:
+        """Return where the Piper voice model (.onnx) is expected."""
+        return self.base_dir / self.voice_model_file
+
+    @property
+    def greeting_cache_path(self) -> Path:
+        """Return where the synthesized startup greeting WAV is written."""
+        return self.base_dir / self.greeting_cache_file
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -61,4 +79,6 @@ class Settings:
                 cls.google_calendar_token_file,
             ),
             fullscreen=fullscreen_value not in {"0", "false", "no", "off"},
+            speaker_device_match=os.getenv("HOMEGIRL_SPEAKER_DEVICE_MATCH", cls.speaker_device_match) or None,
+            voice_model_file=os.getenv("HOMEGIRL_VOICE_MODEL_FILE", cls.voice_model_file),
         )
