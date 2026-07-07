@@ -33,7 +33,7 @@ def main() -> None:
         return
 
     audio = AudioPlayer(settings.speaker_device_match)
-    speech = SpeechSynthesizer(settings.voice_model_path)
+    speech = SpeechSynthesizer(settings.elevenlabs_api_key, settings.elevenlabs_voice_id)
 
     print("Chatting with Homegirl. Type 'quit' to exit.")
     while True:

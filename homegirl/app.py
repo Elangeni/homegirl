@@ -208,10 +208,10 @@ class HomegirlApp:
     def _play_startup_greeting(self, audio: AudioPlayer) -> None:
         """Speak a one-time greeting on a background thread.
 
-        Runs off the main thread since loading the Piper model and
-        synthesizing can take a moment; the render loop shouldn't wait on it.
+        Runs off the main thread since the ElevenLabs call can take a
+        moment; the render loop shouldn't wait on it.
         """
-        speech = SpeechSynthesizer(self._settings.voice_model_path)
+        speech = SpeechSynthesizer(self._settings.elevenlabs_api_key, self._settings.elevenlabs_voice_id)
         if not speech.is_available:
             return
         greeting_text = f"{get_greeting(now_local())}, {self._settings.user_name}."
