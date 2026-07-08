@@ -42,7 +42,7 @@ class Microphone:
             import numpy as np
             import sounddevice as sd
         except Exception:
-            logger.warning("sounddevice/numpy not available; microphone input is disabled.")
+            logger.exception("sounddevice/numpy not available; microphone input is disabled.")
             return
 
         self._sd = sd

@@ -6,6 +6,14 @@ Tap the ambient screen to wake Homegirl into the app screen with a smooth crossf
 
 ## Setup
 
+On Linux/Raspberry Pi, install PortAudio first — `pip install sounddevice` only installs its Python wrapper, not the native library it binds to, so mic input silently disables itself without this:
+
+```bash
+sudo apt-get update && sudo apt-get install -y libportaudio2
+```
+
+(Not needed on macOS — the `sounddevice` wheel there bundles PortAudio already.)
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
