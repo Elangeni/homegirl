@@ -1,6 +1,7 @@
 """Interactive CLI to chat with Homegirl's brain and hear her speak the replies.
 
-Stand-in for voice input until the mic (ears) is wired up:
+A keyboard-only way to exercise the brain without tapping the ambient screen
+and talking out loud:
 
     python tools/chat_with_brain.py
 """

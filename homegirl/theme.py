@@ -95,6 +95,9 @@ THEMES: dict[Daypart, Theme] = {
 INK: Color = (30, 42, 58)
 """Fixed ink color used on frosted content screens, independent of daypart."""
 
+SLATE_MUTED: Color = (138, 155, 181)
+"""Shared slate-blue accent used for secondary voice/insight copy across screens."""
+
 HOME_BACKGROUND_IMAGE = "home.png"
 HOME_WASH_COLOR: Color = (248, 250, 252)
 HOME_WASH_TOP_ALPHA = 190

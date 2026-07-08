@@ -42,7 +42,8 @@ Environment variables:
 - `GOOGLE_CALENDAR_TOKEN_FILE`: filename for the stored OAuth refresh token. Defaults to `google_calendar_token.json` in the project root.
 - `HOMEGIRL_SPEAKER_DEVICE_MATCH`: case-insensitive substring used to pick the audio output device (e.g. `USB` to prefer a USB speaker over HDMI audio outputs). Defaults to `USB`; set empty to use the system default device.
 - `ANTHROPIC_API_KEY`: Claude API key used for the conversational brain. If missing, the brain stays unavailable and any features that depend on it silently no-op. See "Brain" below.
-- `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: ElevenLabs credentials used for speech synthesis. Both are required — if either is missing, speech stays unavailable. See "Sound" below.
+- `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: ElevenLabs credentials used for speech synthesis and speech recognition. Both are required for speech — if either is missing, speech stays unavailable; recognition only needs `ELEVENLABS_API_KEY`. See "Sound" and "Brain" below.
+- `HOMEGIRL_MIC_DEVICE_MATCH`: case-insensitive substring used to pick the audio input device (e.g. `USB` to prefer a USB mic). Defaults to `USB`; set empty to use the system default device.
 
 The National Day client tries `https://api.nationaldaysapi.com/v1/date` first, then a quiet fallback endpoint if needed. It fetches in a background thread, caches the result in memory, and refreshes only once per local calendar day. If the requests fail or the responses cannot be parsed, the line is hidden.
 
@@ -93,13 +94,23 @@ Speech uses the `eleven_flash_v2_5` model — ElevenLabs' own recommendation for
 
 The brain and speech are both cloud-based (Claude and ElevenLabs respectively, both needing internet) — a deliberate tradeoff: real conversational and voice quality mattered more here than staying fully offline. If `ANTHROPIC_API_KEY` isn't set, `Brain.is_available` is `False` and `reply()` returns `None` rather than raising.
 
-There's no mic (ears) yet, so nothing in the app currently calls the brain. Until then, test it with keyboard input as a stand-in for voice:
+You can also test the brain with keyboard input instead of talking out loud:
 
 ```bash
 python tools/chat_with_brain.py
 ```
 
-This chats with Homegirl via the terminal and speaks each reply aloud through the same ElevenLabs + speaker pipeline used for the startup greeting — proving the brain and speech work end-to-end, with only ears left to wire up.
+This chats with Homegirl via the terminal and speaks each reply aloud through the same ElevenLabs + speaker pipeline used everywhere else.
+
+### Ears
+
+Tapping anywhere on the ambient screen except the home button (see "Navigation" below) starts listening — there's no wake word yet, tap-to-talk is the interim trigger. One voice turn is: record → transcribe → `Brain.reply()` → synthesize → play, then back to the ambient screen.
+
+- `homegirl/microphone.py` records from the input device picked by `HOMEGIRL_MIC_DEVICE_MATCH`. There's no fixed recording length — it watches block-level volume (RMS) and stops once a beat of silence (`SILENCE_HANG_SECONDS`) follows detected speech, or gives up after a shorter timeout (`PRE_SPEECH_TIMEOUT_SECONDS`) if nothing was said at all, rather than always waiting out a long fixed `MAX_RECORD_SECONDS` cap. All of this runs on a background thread (`HomegirlApp._run_conversation`) — recording blocks on the mic and transcription/reply/synthesis are all network calls, so none of it can stall the render loop.
+- `homegirl/hearing.py` transcribes the recording via ElevenLabs' Scribe speech-to-text (`scribe_v1`), reusing the same `ELEVENLABS_API_KEY` as speech synthesis.
+- A lock (`HomegirlApp._conversation_lock`) makes sure a second tap can't start an overlapping recording while one is already in flight; the listening screen can still be tapped away manually mid-conversation without that in-flight turn clobbering whatever screen you've since navigated to.
+
+If the mic libraries aren't installed, no input device matches, or ElevenLabs isn't configured, each stage quietly returns `None` and the flow just bounces back to ambient instead of erroring.
 
 ## Architecture
 
@@ -117,6 +128,8 @@ This chats with Homegirl via the terminal and speaks each reply aloud through th
 - `homegirl/theme.py`: time-of-day palettes and animation colors
 - `homegirl/audio.py`: sound effect playback through a chosen output device
 - `homegirl/speech.py`: ElevenLabs text-to-speech synthesis
+- `homegirl/microphone.py`: mic capture with silence-based end-of-speech detection
+- `homegirl/hearing.py`: ElevenLabs speech-to-text transcription
 - `homegirl/brain.py`: Claude-powered conversational brain
 - `homegirl/ui.py`: ambient and app screen rendering
 - `homegirl/settings.py`: runtime configuration
