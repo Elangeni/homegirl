@@ -32,16 +32,21 @@ class AudioPlayer:
             pygame.mixer.init(devicename=device_name)
             if device_match and device_name is None:
                 logger.warning("No audio device matched %r; using system default.", device_match)
-            self._warm_up()
+            self.warm_up()
         except pygame.error:
             logger.warning("Audio output unavailable; sounds will be skipped.")
 
-    def _warm_up(self) -> None:
-        """Play a moment of silence so the real first sound isn't clipped.
+    def warm_up(self) -> None:
+        """Play a moment of silence so the next real sound isn't clipped.
 
-        Some USB audio devices drop the opening fraction of a second of the
-        very first sound played after the mixer opens, while the underlying
-        ALSA/PipeWire stream wakes up. Playing silence first absorbs that.
+        Some USB audio devices drop the opening fraction of a second of
+        sound played after a period of quiet, while the underlying
+        ALSA/PipeWire stream wakes back up. This runs once automatically
+        when the mixer opens, but callers should call it again right before
+        playing anything that was queued up behind a network call (a TTS
+        greeting or conversation reply) — the wait for that call is often
+        long enough for the device to go back to sleep, silently undoing the
+        original warm-up.
         """
         frequency, _, channels = pygame.mixer.get_init()
         frame_count = int(frequency * self._WARMUP_SECONDS)

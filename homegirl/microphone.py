@@ -14,7 +14,12 @@ import wave
 
 logger = logging.getLogger(__name__)
 
-SAMPLE_RATE = 16000
+FALLBACK_SAMPLE_RATE = 16000
+"""Used only if the input device's native rate can't be determined — many
+USB mics reject an arbitrary rate like 16kHz outright rather than resampling,
+so the real recording rate is queried from the device instead (see
+``_resolve_sample_rate``)."""
+
 CHANNELS = 1
 BLOCK_SECONDS = 0.1
 MAX_RECORD_SECONDS = 12.0
@@ -38,6 +43,7 @@ class Microphone:
         self._sd = None
         self._np = None
         self._device_index: int | None = None
+        self._sample_rate = FALLBACK_SAMPLE_RATE
         try:
             import numpy as np
             import sounddevice as sd
@@ -51,6 +57,7 @@ class Microphone:
             self._device_index = self._find_device(device_match)
             if self._device_index is None:
                 logger.warning("No input device matched %r; using system default.", device_match)
+        self._sample_rate = self._resolve_sample_rate()
 
     @property
     def is_available(self) -> bool:
@@ -68,6 +75,26 @@ class Microphone:
                 return index
         return None
 
+    def _resolve_sample_rate(self) -> int:
+        """Return the input device's own default sample rate.
+
+        Many USB mics only support one or two fixed rates (commonly 44100 or
+        48000 Hz) and reject anything else outright rather than resampling —
+        asking for 16kHz on hardware that doesn't support it raises
+        PortAudioError. The WAV header records whatever rate we actually use,
+        so recording at the device's native rate is always safe.
+        """
+        try:
+            device_index = self._device_index
+            if device_index is None:
+                device_index = self._sd.default.device[0]
+            rate = self._sd.query_devices(device_index).get("default_samplerate")
+            if rate:
+                return int(round(rate))
+        except Exception:
+            logger.warning("Could not determine the input device's sample rate; trying %d Hz.", FALLBACK_SAMPLE_RATE)
+        return FALLBACK_SAMPLE_RATE
+
     def record_utterance(self) -> bytes | None:
         """Record until a beat of silence follows speech, and return WAV bytes.
 
@@ -77,7 +104,7 @@ class Microphone:
         if not self.is_available:
             return None
 
-        block_frames = int(SAMPLE_RATE * BLOCK_SECONDS)
+        block_frames = int(self._sample_rate * BLOCK_SECONDS)
         pre_speech_blocks = max(1, round(PRE_SPEECH_TIMEOUT_SECONDS / BLOCK_SECONDS))
         silence_hang_blocks = max(1, round(SILENCE_HANG_SECONDS / BLOCK_SECONDS))
         min_speech_blocks = max(1, round(MIN_SPEECH_SECONDS / BLOCK_SECONDS))
@@ -89,7 +116,7 @@ class Microphone:
 
         try:
             with self._sd.InputStream(
-                samplerate=SAMPLE_RATE,
+                samplerate=self._sample_rate,
                 channels=CHANNELS,
                 dtype="int16",
                 device=self._device_index,
@@ -118,7 +145,7 @@ class Microphone:
             return None
 
         audio = self._np.concatenate(blocks, axis=0)
-        return _to_wav_bytes(audio, SAMPLE_RATE)
+        return _to_wav_bytes(audio, self._sample_rate)
 
 
 def _to_wav_bytes(audio, sample_rate: int) -> bytes:

@@ -15,7 +15,6 @@ from homegirl.animation import AmbientBackground
 from homegirl.models.schedule import ScheduleEvent
 from homegirl.models.weather import HourlyForecast, WeatherData
 from homegirl.schedule_insight import FreeTimeGap, describe_free_time_gap
-from homegirl.suggestion import Suggestion
 from homegirl.theme import (
     CELEBRATION_BACKGROUND_IMAGE,
     CELEBRATION_TEXT_COLOR,
@@ -213,74 +212,6 @@ class AmbientUI:
         self._national_font = _font(round(22 * self._scale), 300)
         self.pill_label_font = _font(round(11 * self._scale), 500)
         self.pill_temp_font = _font(round(16 * self._scale), 600)
-        self._fonts_ready = True
-
-    def _spacing(self, value: int) -> int:
-        return round(value * self._scale)
-
-
-class SuggestionUI:
-    """Render the dismissible placeholder suggestion card over the ambient screen."""
-
-    def __init__(self) -> None:
-        self._fonts_ready = False
-        self._scale = 1.0
-        self.confirm_rect: pygame.Rect | None = None
-        self.dismiss_rect: pygame.Rect | None = None
-        self.close_rect: pygame.Rect | None = None
-
-    def draw(self, surface: pygame.Surface, suggestion: Suggestion) -> None:
-        """Draw the suggestion card and record its tap targets."""
-        self._ensure_fonts(surface)
-
-        margin_x = self._spacing(MARGIN_X)
-        width = round(surface.get_width() * 0.3125)
-        pad = self._spacing(24)
-        max_text_width = width - pad * 2
-
-        body_lines = _wrap_text(self._body_font, suggestion.body, max_text_width)
-        body_images = [_render_text(self._body_font, line, INK) for line in body_lines]
-        body_height = sum(image.get_height() for image in body_images)
-
-        confirm_image = _render_text(self._confirm_font, suggestion.confirm_label, INK)
-        dismiss_image = _render_text_alpha(self._dismiss_font, suggestion.dismiss_label, INK, ALPHA_SECONDARY)
-        actions_height = max(confirm_image.get_height(), dismiss_image.get_height())
-
-        height = pad * 2 + body_height + self._spacing(16) + actions_height
-        rect = pygame.Rect(margin_x, round(surface.get_height() * 0.75), width, height)
-
-        _draw_glass_panel(surface, rect, self._spacing(24), (255, 255, 255, 140), (226, 232, 240, 102))
-
-        y = rect.top + pad
-        for image in body_images:
-            surface.blit(image, (rect.left + pad, y))
-            y += image.get_height()
-
-        y += self._spacing(16)
-        surface.blit(confirm_image, (rect.left + pad, y))
-        confirm_x_end = rect.left + pad + confirm_image.get_width()
-        self.confirm_rect = pygame.Rect(rect.left + pad, y, confirm_image.get_width(), confirm_image.get_height())
-
-        dismiss_x = confirm_x_end + self._spacing(24)
-        surface.blit(dismiss_image, (dismiss_x, y))
-        self.dismiss_rect = pygame.Rect(dismiss_x, y, dismiss_image.get_width(), dismiss_image.get_height())
-
-        close_size = self._spacing(12)
-        self.close_rect = pygame.Rect(
-            rect.right - self._spacing(15) - close_size,
-            rect.top + self._spacing(15),
-            close_size,
-            close_size,
-        )
-        svg_icon.draw_icon(surface, self.close_rect, "x", INK, alpha=ALPHA_MUTED)
-
-    def _ensure_fonts(self, surface: pygame.Surface) -> None:
-        if self._fonts_ready:
-            return
-        self._scale = _scale_for(surface)
-        self._body_font = _font(round(16 * self._scale), 400)
-        self._confirm_font = _font(round(14 * self._scale), 600)
-        self._dismiss_font = _font(round(14 * self._scale), 300)
         self._fonts_ready = True
 
     def _spacing(self, value: int) -> int:
@@ -1057,7 +988,7 @@ class DayDetailUI:
 
 
 def draw_weather_pill(surface: pygame.Surface, ui: AmbientUI, weather: WeatherData, theme: Theme) -> None:
-    """Draw the frosted weather pill shared by the ambient and suggestion screens."""
+    """Draw the frosted weather pill in the corner of the ambient screen."""
     if not weather.is_available:
         return
 

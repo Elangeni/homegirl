@@ -31,7 +31,6 @@ from homegirl.schedule_insight import (
 from homegirl.services.calendar import CalendarService
 from homegirl.services.weather import WeatherService
 from homegirl.settings import Settings
-from homegirl.suggestion import SuggestionState
 from homegirl.theme import Theme, get_theme
 from homegirl.transition import ScreenTransition
 from homegirl.ui import (
@@ -49,7 +48,6 @@ from homegirl.ui import (
     ListeningUI,
     ReflectionUI,
     ReflectionViewModel,
-    SuggestionUI,
     WeatherUI,
     WeatherViewModel,
 )
@@ -120,8 +118,6 @@ class HomegirlApp:
             ).start()
             background = AmbientBackground(self._settings.animation_quality_scale)
             ambient_ui = AmbientUI()
-            suggestion_ui = SuggestionUI()
-            suggestion_state = SuggestionState()
             app_ui = AppUI()
             weather_ui = WeatherUI()
             calendar_ui = CalendarUI()
@@ -141,8 +137,6 @@ class HomegirlApp:
                     tap_pos,
                     wake_controller,
                     ambient_ui,
-                    suggestion_state,
-                    suggestion_ui,
                     app_ui,
                     weather_ui,
                     calendar_ui,
@@ -164,8 +158,6 @@ class HomegirlApp:
                 background.update(delta_seconds)
                 ui_bundle = (
                     ambient_ui,
-                    suggestion_ui,
-                    suggestion_state,
                     app_ui,
                     weather_ui,
                     calendar_ui,
@@ -226,6 +218,7 @@ class HomegirlApp:
             return
         greeting_text = f"{get_greeting(now_local())}, {self._settings.user_name}."
         if self._speech.synthesize_to_file(greeting_text, self._settings.greeting_cache_path):
+            self._audio.warm_up()
             self._audio.play(self._settings.greeting_cache_path)
 
     def _run_conversation(self, wake_controller: WakeController) -> None:
@@ -248,6 +241,7 @@ class HomegirlApp:
 
             reply = self._brain.reply(transcript)
             if reply and self._speech.synthesize_to_file(reply, self._settings.reply_cache_path):
+                self._audio.warm_up()
                 self._audio.play(self._settings.reply_cache_path)
         finally:
             if wake_controller.screen == Screen.LISTENING:
@@ -264,8 +258,6 @@ class HomegirlApp:
         schedule: ScheduleData,
         background: AmbientBackground,
         ambient_ui: AmbientUI,
-        suggestion_ui: SuggestionUI,
-        suggestion_state: SuggestionState,
         app_ui: AppUI,
         weather_ui: WeatherUI,
         calendar_ui: CalendarUI,
@@ -292,10 +284,6 @@ class HomegirlApp:
                 ),
                 theme,
             )
-
-            suggestion = suggestion_state.active
-            if suggestion is not None:
-                suggestion_ui.draw(surface, suggestion)
             return
 
         if active_screen == Screen.WEATHER:
@@ -401,8 +389,6 @@ class HomegirlApp:
         tap_pos: tuple[int, int] | None,
         wake_controller: WakeController,
         ambient_ui: AmbientUI,
-        suggestion_state: SuggestionState,
-        suggestion_ui: SuggestionUI,
         app_ui: AppUI,
         weather_ui: WeatherUI,
         calendar_ui: CalendarUI,
@@ -419,18 +405,6 @@ class HomegirlApp:
             if ambient_ui.home_rect and ambient_ui.home_rect.collidepoint(tap_pos):
                 wake_controller.show_app()
                 return
-
-            suggestion = suggestion_state.active
-            if suggestion is not None:
-                if suggestion_ui.confirm_rect and suggestion_ui.confirm_rect.collidepoint(tap_pos):
-                    suggestion_state.confirm()
-                    return
-                if suggestion_ui.dismiss_rect and suggestion_ui.dismiss_rect.collidepoint(tap_pos):
-                    suggestion_state.dismiss()
-                    return
-                if suggestion_ui.close_rect and suggestion_ui.close_rect.collidepoint(tap_pos):
-                    suggestion_state.dismiss()
-                    return
 
             # Everywhere else on the ambient screen starts a conversation —
             # tap-to-talk for now, a wake word later. Ignore the tap if one
