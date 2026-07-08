@@ -12,6 +12,13 @@ MODEL_ID = "eleven_flash_v2_5"
 # the free tier and pygame's SDL_mixer decodes it natively either way.
 OUTPUT_FORMAT = "mp3_44100_128"
 
+# ElevenLabs' default stability (0.5) trends monotone/robotic; lower values
+# give more natural emotional range. style adds a little expressive
+# exaggeration on top. speed is 1.0 = normal pace.
+VOICE_STABILITY = 0.35
+VOICE_STYLE = 0.15
+VOICE_SPEED = 1.0
+
 
 class SpeechSynthesizer:
     """Wraps the ElevenLabs API to synthesize text into an audio file.
@@ -29,10 +36,19 @@ class SpeechSynthesizer:
             return
         try:
             from elevenlabs.client import ElevenLabs
+            from elevenlabs.types import VoiceSettings
 
-            self._client = ElevenLabs(api_key=api_key)
+            client = ElevenLabs(api_key=api_key)
+            voice_settings = VoiceSettings(
+                stability=VOICE_STABILITY,
+                style=VOICE_STYLE,
+                speed=VOICE_SPEED,
+            )
         except Exception:
             logger.exception("Failed to create ElevenLabs client; speech is disabled.")
+            return
+        self._client = client
+        self._voice_settings = voice_settings
 
     @property
     def is_available(self) -> bool:
@@ -49,6 +65,7 @@ class SpeechSynthesizer:
                 text=text,
                 model_id=MODEL_ID,
                 output_format=OUTPUT_FORMAT,
+                voice_settings=self._voice_settings,
             )
             out_path.write_bytes(b"".join(chunks))
             return True
