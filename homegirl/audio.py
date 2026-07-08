@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -100,6 +101,15 @@ class AudioPlayer:
         waiting for an entire reply to be synthesized before any of it is
         heard. Iterates ``chunks`` lazily, so a generator that synthesizes
         on demand drives the pipelining.
+
+        Blocks the calling thread until the audio has actually finished
+        playing (not just been queued) — callers run this on a background
+        thread already, and need to know when she's truly done talking
+        before treating the turn as over. Returning as soon as the last
+        chunk was *queued* let a tap immediately after start a new
+        recording while she was still audibly speaking, which the mic then
+        picked back up through the speaker and transcribed as if it were
+        the user talking.
         """
         if not self.is_available:
             return
@@ -115,3 +125,6 @@ class AudioPlayer:
                     started = True
         except pygame.error:
             logger.warning("Could not play streamed audio.")
+            return
+        while started and channel.get_busy():
+            time.sleep(0.05)
