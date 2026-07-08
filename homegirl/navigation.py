@@ -16,6 +16,7 @@ class Screen(str, Enum):
     DAY_DETAIL = "day_detail"
     CELEBRATION = "celebration"
     REFLECTION = "reflection"
+    LISTENING = "listening"
 
 
 _RETURN_SCREEN: dict[Screen, Screen] = {
@@ -25,6 +26,7 @@ _RETURN_SCREEN: dict[Screen, Screen] = {
     Screen.DAY_DETAIL: Screen.FULL_CALENDAR,
     Screen.CELEBRATION: Screen.AMBIENT,
     Screen.REFLECTION: Screen.AMBIENT,
+    Screen.LISTENING: Screen.AMBIENT,
 }
 
 
@@ -69,6 +71,10 @@ class WakeController:
     def show_reflection(self) -> None:
         """Navigate to the weekly reflection screen."""
         self.show(Screen.REFLECTION)
+
+    def show_listening(self) -> None:
+        """Navigate to the full-screen listening state."""
+        self.show(Screen.LISTENING)
 
     def show_app(self) -> None:
         """Return to the app grid screen."""

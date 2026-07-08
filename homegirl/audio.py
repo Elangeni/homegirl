@@ -22,6 +22,8 @@ class AudioPlayer:
     no-ops quietly if the audio subsystem can't be reached at all.
     """
 
+    _WARMUP_SECONDS = 0.2
+
     def __init__(self, device_match: str | None = None) -> None:
         device_name = self._find_device(device_match) if device_match else None
         try:
@@ -30,8 +32,27 @@ class AudioPlayer:
             pygame.mixer.init(devicename=device_name)
             if device_match and device_name is None:
                 logger.warning("No audio device matched %r; using system default.", device_match)
+            self.warm_up()
         except pygame.error:
             logger.warning("Audio output unavailable; sounds will be skipped.")
+
+    def warm_up(self) -> None:
+        """Play a moment of silence so the next real sound isn't clipped.
+
+        Some USB audio devices drop the opening fraction of a second of
+        sound played after a period of quiet, while the underlying
+        ALSA/PipeWire stream wakes back up. This runs once automatically
+        when the mixer opens, but callers should call it again right before
+        playing anything that was queued up behind a network call (a TTS
+        greeting or conversation reply) — the wait for that call is often
+        long enough for the device to go back to sleep, silently undoing the
+        original warm-up.
+        """
+        frequency, _, channels = pygame.mixer.get_init()
+        frame_count = int(frequency * self._WARMUP_SECONDS)
+        silence = bytes(frame_count * channels * 2)
+        pygame.mixer.Sound(buffer=silence).play()
+        pygame.time.wait(round(self._WARMUP_SECONDS * 1000))
 
     @staticmethod
     def _find_device(match: str) -> str | None:

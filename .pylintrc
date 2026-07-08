@@ -13,7 +13,7 @@ max-line-length=120
 # pygame UI classes with several fonts/rects and drawing methods with many
 # layout parameters) rather than forcing speculative refactors to satisfy
 # pylint's generic defaults.
-max-attributes=20
+max-attributes=25
 max-locals=40
 max-args=20
 max-positional-arguments=20

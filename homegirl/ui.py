@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar as calendar_module
+import math
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -14,7 +15,6 @@ from homegirl.animation import AmbientBackground
 from homegirl.models.schedule import ScheduleEvent
 from homegirl.models.weather import HourlyForecast, WeatherData
 from homegirl.schedule_insight import FreeTimeGap, describe_free_time_gap
-from homegirl.suggestion import Suggestion
 from homegirl.theme import (
     CELEBRATION_BACKGROUND_IMAGE,
     CELEBRATION_TEXT_COLOR,
@@ -36,6 +36,7 @@ from homegirl.theme import (
     HOME_WASH_COLOR,
     HOME_WASH_TOP_ALPHA,
     INK,
+    SLATE_MUTED,
     Theme,
 )
 
@@ -142,6 +143,7 @@ class AmbientUI:
     def __init__(self) -> None:
         self._fonts_ready = False
         self._scale = 1.0
+        self.home_rect: pygame.Rect | None = None
 
     @property
     def scale(self) -> float:
@@ -185,6 +187,18 @@ class AmbientUI:
             y += image.get_height() + spacing
 
         draw_weather_pill(surface, self, model.weather, theme)
+        self._draw_home_button(surface, theme)
+
+    def _draw_home_button(self, surface: pygame.Surface, theme: Theme) -> None:
+        size = self._spacing(56)
+        margin = self._spacing(24)
+        top = self._spacing(40)
+        rect = pygame.Rect(margin, top, size, size)
+
+        _draw_glass_panel(surface, rect, size // 2, theme.pill_bg, theme.pill_border)
+        icon_rect = rect.inflate(-round(size * 0.44), -round(size * 0.44))
+        svg_icon.draw_icon(surface, icon_rect, "house", theme.pill_text)
+        self.home_rect = rect
 
     def _ensure_fonts(self, surface: pygame.Surface) -> None:
         if self._fonts_ready:
@@ -198,74 +212,6 @@ class AmbientUI:
         self._national_font = _font(round(22 * self._scale), 300)
         self.pill_label_font = _font(round(11 * self._scale), 500)
         self.pill_temp_font = _font(round(16 * self._scale), 600)
-        self._fonts_ready = True
-
-    def _spacing(self, value: int) -> int:
-        return round(value * self._scale)
-
-
-class SuggestionUI:
-    """Render the dismissible placeholder suggestion card over the ambient screen."""
-
-    def __init__(self) -> None:
-        self._fonts_ready = False
-        self._scale = 1.0
-        self.confirm_rect: pygame.Rect | None = None
-        self.dismiss_rect: pygame.Rect | None = None
-        self.close_rect: pygame.Rect | None = None
-
-    def draw(self, surface: pygame.Surface, suggestion: Suggestion) -> None:
-        """Draw the suggestion card and record its tap targets."""
-        self._ensure_fonts(surface)
-
-        margin_x = self._spacing(MARGIN_X)
-        width = round(surface.get_width() * 0.3125)
-        pad = self._spacing(24)
-        max_text_width = width - pad * 2
-
-        body_lines = _wrap_text(self._body_font, suggestion.body, max_text_width)
-        body_images = [_render_text(self._body_font, line, INK) for line in body_lines]
-        body_height = sum(image.get_height() for image in body_images)
-
-        confirm_image = _render_text(self._confirm_font, suggestion.confirm_label, INK)
-        dismiss_image = _render_text_alpha(self._dismiss_font, suggestion.dismiss_label, INK, ALPHA_SECONDARY)
-        actions_height = max(confirm_image.get_height(), dismiss_image.get_height())
-
-        height = pad * 2 + body_height + self._spacing(16) + actions_height
-        rect = pygame.Rect(margin_x, round(surface.get_height() * 0.75), width, height)
-
-        _draw_glass_panel(surface, rect, self._spacing(24), (255, 255, 255, 140), (226, 232, 240, 102))
-
-        y = rect.top + pad
-        for image in body_images:
-            surface.blit(image, (rect.left + pad, y))
-            y += image.get_height()
-
-        y += self._spacing(16)
-        surface.blit(confirm_image, (rect.left + pad, y))
-        confirm_x_end = rect.left + pad + confirm_image.get_width()
-        self.confirm_rect = pygame.Rect(rect.left + pad, y, confirm_image.get_width(), confirm_image.get_height())
-
-        dismiss_x = confirm_x_end + self._spacing(24)
-        surface.blit(dismiss_image, (dismiss_x, y))
-        self.dismiss_rect = pygame.Rect(dismiss_x, y, dismiss_image.get_width(), dismiss_image.get_height())
-
-        close_size = self._spacing(12)
-        self.close_rect = pygame.Rect(
-            rect.right - self._spacing(15) - close_size,
-            rect.top + self._spacing(15),
-            close_size,
-            close_size,
-        )
-        svg_icon.draw_icon(surface, self.close_rect, "x", INK, alpha=ALPHA_MUTED)
-
-    def _ensure_fonts(self, surface: pygame.Surface) -> None:
-        if self._fonts_ready:
-            return
-        self._scale = _scale_for(surface)
-        self._body_font = _font(round(16 * self._scale), 400)
-        self._confirm_font = _font(round(14 * self._scale), 600)
-        self._dismiss_font = _font(round(14 * self._scale), 300)
         self._fonts_ready = True
 
     def _spacing(self, value: int) -> int:
@@ -546,7 +492,7 @@ class CalendarUI:
 
     def _draw_free_chip(self, surface: pygame.Surface, x: int, y: int, gap: FreeTimeGap) -> int:
         label = describe_free_time_gap(gap)
-        text_image = _render_text(self._chip_font, label, (138, 155, 181))
+        text_image = _render_text(self._chip_font, label, SLATE_MUTED)
         pad_x = self._spacing(16)
         pad_y = self._spacing(8)
         icon_size = self._spacing(14)
@@ -556,12 +502,12 @@ class CalendarUI:
         rect = pygame.Rect(x, y, width, height)
 
         chip = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(chip, (138, 155, 181, 26), chip.get_rect(), border_radius=self._spacing(12))
+        pygame.draw.rect(chip, (*SLATE_MUTED, 26), chip.get_rect(), border_radius=self._spacing(12))
         pygame.draw.rect(chip, (226, 232, 240, 102), chip.get_rect(), width=1, border_radius=self._spacing(12))
         surface.blit(chip, rect.topleft)
 
         icon_rect = pygame.Rect(rect.left + pad_x, rect.centery - icon_size // 2, icon_size, icon_size)
-        svg_icon.draw_icon(surface, icon_rect, "leaf", (138, 155, 181))
+        svg_icon.draw_icon(surface, icon_rect, "leaf", SLATE_MUTED)
         surface.blit(text_image, (icon_rect.right + gap_size, rect.centery - text_image.get_height() // 2))
         return height
 
@@ -722,7 +668,7 @@ class ReflectionUI:
 
             glow_center = (margin_x + self._spacing(20), y + self._spacing(20))
             self._draw_pulse(surface, glow_center)
-            listening = _render_text(self._listening_font, "Listening...", (138, 155, 181))
+            listening = _render_text(self._listening_font, "Listening...", SLATE_MUTED)
             surface.blit(listening, (margin_x + self._spacing(52), y + self._spacing(13)))
             y += self._spacing(40) + self._spacing(32)
 
@@ -764,6 +710,59 @@ class ReflectionUI:
         self._active_font = _font(round(40 * self._scale), 600)
         self._listening_font = _font(round(14 * self._scale), 300)
         self._dim_font = _font(round(28 * self._scale), 300)
+        self._fonts_ready = True
+
+    def _spacing(self, value: int) -> int:
+        return round(value * self._scale)
+
+
+class ListeningUI:
+    """Render the full-screen "I'm listening..." state shown while capturing voice input."""
+
+    def __init__(self) -> None:
+        self._fonts_ready = False
+        self._scale = 1.0
+
+    def draw(self, surface: pygame.Surface, background: AmbientBackground, caption: str = "I'm listening...") -> None:
+        """Draw the wallpaper wash, a breathing glow, and the listening caption, all centered."""
+        self._ensure_fonts(surface)
+        background.draw_washed(
+            surface, HOME_BACKGROUND_IMAGE, HOME_WASH_COLOR, HOME_WASH_TOP_ALPHA, HOME_WASH_BOTTOM_ALPHA
+        )
+
+        width, height = surface.get_size()
+        glow_size = self._spacing(120)
+        gap = self._spacing(24)
+        caption_image = _render_text_alpha(self._caption_font, caption, SLATE_MUTED, 230)
+
+        content_height = glow_size + gap + caption_image.get_height()
+        top = (height - content_height) // 2
+
+        glow_center = (width // 2, top + glow_size // 2)
+        self._draw_glow(surface, glow_center, glow_size // 2)
+
+        caption_top = top + glow_size + gap
+        surface.blit(caption_image, caption_image.get_rect(midtop=(width // 2, caption_top)))
+
+    def _draw_glow(self, surface: pygame.Surface, center: tuple[int, int], base_radius: int) -> None:
+        ticks = pygame.time.get_ticks()
+        breathe = (math.sin(ticks / 1000.0 * math.pi) + 1) / 2
+        radius = round(base_radius * (0.92 + 0.16 * breathe))
+
+        glow = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
+        glow_center = glow.get_rect().center
+        for step in range(8, 0, -1):
+            alpha = round(6 * step)
+            layer_radius = round(radius * (0.5 + 0.5 * step / 8))
+            pygame.draw.circle(glow, (*SLATE_MUTED, alpha), glow_center, layer_radius)
+        pygame.draw.circle(glow, (*SLATE_MUTED, 110), glow_center, round(radius * 0.55))
+        surface.blit(glow, glow.get_rect(center=center))
+
+    def _ensure_fonts(self, surface: pygame.Surface) -> None:
+        if self._fonts_ready:
+            return
+        self._scale = _scale_for(surface)
+        self._caption_font = _font(round(14 * self._scale), 300)
         self._fonts_ready = True
 
     def _spacing(self, value: int) -> int:
@@ -991,7 +990,7 @@ class DayDetailUI:
 
 
 def draw_weather_pill(surface: pygame.Surface, ui: AmbientUI, weather: WeatherData, theme: Theme) -> None:
-    """Draw the frosted weather pill shared by the ambient and suggestion screens."""
+    """Draw the frosted weather pill in the corner of the ambient screen."""
     if not weather.is_available:
         return
 

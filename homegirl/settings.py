@@ -28,8 +28,12 @@ class Settings:
     google_calendar_timeout_seconds: float = 4.0
     fullscreen: bool = True
     speaker_device_match: str | None = "USB"
-    voice_model_file: str = "voices/en_US-hfc_female-medium.onnx"
-    greeting_cache_file: str = "greeting_cache.wav"
+    mic_device_match: str | None = "USB"
+    greeting_cache_file: str = "greeting_cache.mp3"
+    reply_cache_file: str = "reply_cache.mp3"
+    anthropic_api_key: str | None = None
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str | None = None
 
     @property
     def assets_dir(self) -> Path:
@@ -47,14 +51,14 @@ class Settings:
         return self.base_dir / self.google_calendar_token_file
 
     @property
-    def voice_model_path(self) -> Path:
-        """Return where the Piper voice model (.onnx) is expected."""
-        return self.base_dir / self.voice_model_file
-
-    @property
     def greeting_cache_path(self) -> Path:
         """Return where the synthesized startup greeting WAV is written."""
         return self.base_dir / self.greeting_cache_file
+
+    @property
+    def reply_cache_path(self) -> Path:
+        """Return where each synthesized conversation reply is written."""
+        return self.base_dir / self.reply_cache_file
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -80,5 +84,8 @@ class Settings:
             ),
             fullscreen=fullscreen_value not in {"0", "false", "no", "off"},
             speaker_device_match=os.getenv("HOMEGIRL_SPEAKER_DEVICE_MATCH", cls.speaker_device_match) or None,
-            voice_model_file=os.getenv("HOMEGIRL_VOICE_MODEL_FILE", cls.voice_model_file),
+            mic_device_match=os.getenv("HOMEGIRL_MIC_DEVICE_MATCH", cls.mic_device_match) or None,
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+            elevenlabs_api_key=os.getenv("ELEVENLABS_API_KEY"),
+            elevenlabs_voice_id=os.getenv("ELEVENLABS_VOICE_ID"),
         )

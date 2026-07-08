@@ -6,5 +6,4 @@ __pycache__/
 .venv/
 .env
 google_calendar_token.json
-voices/
-greeting_cache.wav
+greeting_cache.mp3

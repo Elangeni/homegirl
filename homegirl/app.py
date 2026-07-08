@@ -9,8 +9,11 @@ import pygame
 
 from homegirl.animation import AmbientBackground
 from homegirl.audio import AudioPlayer
+from homegirl.brain import Brain
 from homegirl.clock import format_date, format_time, now_local
 from homegirl.greeting import Daypart, get_daypart, get_greeting
+from homegirl.hearing import SpeechRecognizer
+from homegirl.microphone import Microphone
 from homegirl.speech import SpeechSynthesizer
 from homegirl.models.schedule import ScheduleData
 from homegirl.models.weather import WeatherData
@@ -28,7 +31,6 @@ from homegirl.schedule_insight import (
 from homegirl.services.calendar import CalendarService
 from homegirl.services.weather import WeatherService
 from homegirl.settings import Settings
-from homegirl.suggestion import SuggestionState
 from homegirl.theme import Theme, get_theme
 from homegirl.transition import ScreenTransition
 from homegirl.ui import (
@@ -43,9 +45,9 @@ from homegirl.ui import (
     DayDetailViewModel,
     FullCalendarUI,
     FullCalendarViewModel,
+    ListeningUI,
     ReflectionUI,
     ReflectionViewModel,
-    SuggestionUI,
     WeatherUI,
     WeatherViewModel,
 )
@@ -88,6 +90,11 @@ class HomegirlApp:
             settings.google_calendar_id,
             settings.google_calendar_timeout_seconds,
         )
+        self._brain = Brain(settings.anthropic_api_key, settings.user_name)
+        self._microphone = Microphone(settings.mic_device_match)
+        self._recognizer = SpeechRecognizer(settings.elevenlabs_api_key)
+        self._speech = SpeechSynthesizer(settings.elevenlabs_api_key, settings.elevenlabs_voice_id)
+        self._conversation_lock = threading.Lock()
         self._selected_day: date | None = None
 
     def run(self) -> None:
@@ -103,17 +110,14 @@ class HomegirlApp:
             pygame.mouse.set_visible(False)
 
             clock = pygame.time.Clock()
-            audio = AudioPlayer(self._settings.speaker_device_match)
+            self._audio = AudioPlayer(self._settings.speaker_device_match)
             previous_daypart = get_daypart(now_local())
             threading.Thread(
                 target=self._play_startup_greeting,
-                args=(audio,),
                 daemon=True,
             ).start()
             background = AmbientBackground(self._settings.animation_quality_scale)
             ambient_ui = AmbientUI()
-            suggestion_ui = SuggestionUI()
-            suggestion_state = SuggestionState()
             app_ui = AppUI()
             weather_ui = WeatherUI()
             calendar_ui = CalendarUI()
@@ -121,6 +125,7 @@ class HomegirlApp:
             day_detail_ui = DayDetailUI()
             celebration_ui = CelebrationUI()
             reflection_ui = ReflectionUI()
+            listening_ui = ListeningUI()
             wake_controller = WakeController(APP_IDLE_TIMEOUT_SECONDS)
             screen_transition = ScreenTransition(Screen.AMBIENT, SCREEN_TRANSITION_SECONDS)
             running = True
@@ -131,8 +136,7 @@ class HomegirlApp:
                 self._handle_tap(
                     tap_pos,
                     wake_controller,
-                    suggestion_state,
-                    suggestion_ui,
+                    ambient_ui,
                     app_ui,
                     weather_ui,
                     calendar_ui,
@@ -145,7 +149,7 @@ class HomegirlApp:
                 moment = now_local()
                 daypart = get_daypart(moment)
                 if daypart != previous_daypart:
-                    audio.play(self._settings.sounds_dir / DAYPART_CHIME_FILES[daypart])
+                    self._audio.play(self._settings.sounds_dir / DAYPART_CHIME_FILES[daypart])
                     previous_daypart = daypart
                 theme = get_theme(daypart)
                 weather = self._weather.get_weather(moment)
@@ -154,8 +158,6 @@ class HomegirlApp:
                 background.update(delta_seconds)
                 ui_bundle = (
                     ambient_ui,
-                    suggestion_ui,
-                    suggestion_state,
                     app_ui,
                     weather_ui,
                     calendar_ui,
@@ -163,6 +165,7 @@ class HomegirlApp:
                     day_detail_ui,
                     celebration_ui,
                     reflection_ui,
+                    listening_ui,
                 )
                 if screen_transition.is_active:
                     source_surface = pygame.Surface(screen.get_size())
@@ -205,18 +208,45 @@ class HomegirlApp:
         finally:
             pygame.quit()
 
-    def _play_startup_greeting(self, audio: AudioPlayer) -> None:
+    def _play_startup_greeting(self) -> None:
         """Speak a one-time greeting on a background thread.
 
-        Runs off the main thread since loading the Piper model and
-        synthesizing can take a moment; the render loop shouldn't wait on it.
+        Runs off the main thread since the ElevenLabs call can take a
+        moment; the render loop shouldn't wait on it.
         """
-        speech = SpeechSynthesizer(self._settings.voice_model_path)
-        if not speech.is_available:
+        if not self._speech.is_available:
             return
         greeting_text = f"{get_greeting(now_local())}, {self._settings.user_name}."
-        if speech.synthesize_to_file(greeting_text, self._settings.greeting_cache_path):
-            audio.play(self._settings.greeting_cache_path)
+        if self._speech.synthesize_to_file(greeting_text, self._settings.greeting_cache_path):
+            self._audio.warm_up()
+            self._audio.play(self._settings.greeting_cache_path)
+
+    def _run_conversation(self, wake_controller: WakeController) -> None:
+        """Record, transcribe, think, and speak a single voice turn.
+
+        Runs on a background thread — recording blocks on the mic, and
+        transcription/reply/synthesis are all network calls, none of which
+        should stall the render loop. Only returns to ambient on its own if
+        the listening screen is still showing; if the user already tapped
+        away, their navigation wins instead of being clobbered.
+        """
+        try:
+            audio_bytes = self._microphone.record_utterance()
+            if audio_bytes is None:
+                return
+
+            transcript = self._recognizer.transcribe(audio_bytes)
+            if not transcript:
+                return
+
+            reply = self._brain.reply(transcript)
+            if reply and self._speech.synthesize_to_file(reply, self._settings.reply_cache_path):
+                self._audio.warm_up()
+                self._audio.play(self._settings.reply_cache_path)
+        finally:
+            if wake_controller.screen == Screen.LISTENING:
+                wake_controller.dismiss()
+            self._conversation_lock.release()
 
     def _draw_screen(
         self,
@@ -228,8 +258,6 @@ class HomegirlApp:
         schedule: ScheduleData,
         background: AmbientBackground,
         ambient_ui: AmbientUI,
-        suggestion_ui: SuggestionUI,
-        suggestion_state: SuggestionState,
         app_ui: AppUI,
         weather_ui: WeatherUI,
         calendar_ui: CalendarUI,
@@ -237,6 +265,7 @@ class HomegirlApp:
         day_detail_ui: DayDetailUI,
         celebration_ui: CelebrationUI,
         reflection_ui: ReflectionUI,
+        listening_ui: ListeningUI,
     ) -> None:
         """Draw one top-level screen onto a surface."""
         if active_screen == Screen.AMBIENT:
@@ -255,10 +284,6 @@ class HomegirlApp:
                 ),
                 theme,
             )
-
-            suggestion = suggestion_state.active
-            if suggestion is not None:
-                suggestion_ui.draw(surface, suggestion)
             return
 
         if active_screen == Screen.WEATHER:
@@ -339,6 +364,10 @@ class HomegirlApp:
             )
             return
 
+        if active_screen == Screen.LISTENING:
+            listening_ui.draw(surface, background)
+            return
+
         app_ui.draw(
             surface,
             AppViewModel(
@@ -359,8 +388,7 @@ class HomegirlApp:
         self,
         tap_pos: tuple[int, int] | None,
         wake_controller: WakeController,
-        suggestion_state: SuggestionState,
-        suggestion_ui: SuggestionUI,
+        ambient_ui: AmbientUI,
         app_ui: AppUI,
         weather_ui: WeatherUI,
         calendar_ui: CalendarUI,
@@ -374,18 +402,22 @@ class HomegirlApp:
         current_screen = wake_controller.screen
 
         if current_screen == Screen.AMBIENT:
-            suggestion = suggestion_state.active
-            if suggestion is not None:
-                if suggestion_ui.confirm_rect and suggestion_ui.confirm_rect.collidepoint(tap_pos):
-                    suggestion_state.confirm()
-                    return
-                if suggestion_ui.dismiss_rect and suggestion_ui.dismiss_rect.collidepoint(tap_pos):
-                    suggestion_state.dismiss()
-                    return
-                if suggestion_ui.close_rect and suggestion_ui.close_rect.collidepoint(tap_pos):
-                    suggestion_state.dismiss()
-                    return
-            wake_controller.show_app()
+            if ambient_ui.home_rect and ambient_ui.home_rect.collidepoint(tap_pos):
+                wake_controller.show_app()
+                return
+
+            # Everywhere else on the ambient screen starts a conversation —
+            # tap-to-talk for now, a wake word later. Ignore the tap if one
+            # is already in flight rather than stacking recordings. Released
+            # in `_run_conversation` on the background thread it starts, not
+            # here, so a `with` block would defeat the point.
+            if self._conversation_lock.acquire(blocking=False):  # pylint: disable=consider-using-with
+                wake_controller.show_listening()
+                threading.Thread(
+                    target=self._run_conversation,
+                    args=(wake_controller,),
+                    daemon=True,
+                ).start()
             return
 
         if current_screen == Screen.APP:
@@ -431,6 +463,10 @@ class HomegirlApp:
                 wake_controller.dismiss()
             return
 
+        if current_screen == Screen.LISTENING:
+            wake_controller.dismiss()
+            return
+
     def _handle_events(
         self,
         window_size: tuple[int, int],
@@ -438,9 +474,10 @@ class HomegirlApp:
     ) -> tuple[bool, bool, tuple[int, int] | None]:
         """Process quit events and report user activity and tap position.
 
-        "C" and "R" are developer shortcuts that jump straight to the
-        celebration and weekly-reflection screens — there's no real
-        completion-detection or scheduling engine to trigger them yet.
+        "H" mirrors tapping the ambient screen's home button. "C" and "R" are
+        developer shortcuts that jump straight to the celebration and
+        weekly-reflection screens — there's no real completion-detection or
+        scheduling engine to trigger them yet.
         """
         had_activity = False
         tap_pos: tuple[int, int] | None = None
@@ -461,7 +498,7 @@ class HomegirlApp:
                     wake_controller.show_celebration()
                 elif event.key == pygame.K_r:
                     wake_controller.show_reflection()
-                elif wake_controller.screen == Screen.AMBIENT:
+                elif event.key == pygame.K_h:
                     wake_controller.show_app()
         return True, had_activity, tap_pos
 
