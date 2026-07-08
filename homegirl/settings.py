@@ -28,7 +28,7 @@ class Settings:
     google_calendar_timeout_seconds: float = 4.0
     fullscreen: bool = True
     speaker_device_match: str | None = "USB"
-    greeting_cache_file: str = "greeting_cache.wav"
+    greeting_cache_file: str = "greeting_cache.mp3"
     anthropic_api_key: str | None = None
     elevenlabs_api_key: str | None = None
     elevenlabs_voice_id: str | None = None

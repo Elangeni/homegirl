@@ -8,11 +8,13 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 MODEL_ID = "eleven_flash_v2_5"
-OUTPUT_FORMAT = "wav_44100"
+# wav/pcm at 44.1kHz require an ElevenLabs Pro subscription; mp3 works on
+# the free tier and pygame's SDL_mixer decodes it natively either way.
+OUTPUT_FORMAT = "mp3_44100_128"
 
 
 class SpeechSynthesizer:
-    """Wraps the ElevenLabs API to synthesize text into a WAV file.
+    """Wraps the ElevenLabs API to synthesize text into an audio file.
 
     Requires both an API key and a voice ID; if either is missing, or the
     client fails to construct, synthesis quietly no-ops rather than
@@ -38,7 +40,7 @@ class SpeechSynthesizer:
         return self._client is not None
 
     def synthesize_to_file(self, text: str, out_path: Path) -> bool:
-        """Synthesize text to a WAV file. Returns False (and logs) on failure."""
+        """Synthesize text to an audio file. Returns False (and logs) on failure."""
         if not self.is_available:
             return False
         try:

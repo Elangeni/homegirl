@@ -85,7 +85,7 @@ Audio output picks a device matching `HOMEGIRL_SPEAKER_DEVICE_MATCH` (see above)
 2. Pick a voice from their Voice Library and copy its Voice ID.
 3. Put both in `.env` as `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
 
-Speech uses the `eleven_flash_v2_5` model — ElevenLabs' own recommendation for low-latency conversational use, since this also carries the brain's replies, not just the one-time greeting — requesting `wav_44100` output directly so it drops straight into the existing playback pipeline with no format conversion.
+Speech uses the `eleven_flash_v2_5` model — ElevenLabs' own recommendation for low-latency conversational use, since this also carries the brain's replies, not just the one-time greeting — requesting `mp3_44100_128` output, which pygame's SDL_mixer decodes natively. (`wav`/`pcm` at 44.1kHz require an ElevenLabs Pro subscription; mp3 works on the free tier.)
 
 ## Brain
 
