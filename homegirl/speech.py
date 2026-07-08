@@ -55,10 +55,10 @@ class SpeechSynthesizer:
         """Return whether an ElevenLabs client was configured successfully."""
         return self._client is not None
 
-    def synthesize_to_file(self, text: str, out_path: Path) -> bool:
-        """Synthesize text to an audio file. Returns False (and logs) on failure."""
+    def synthesize(self, text: str) -> bytes | None:
+        """Synthesize text to audio bytes. Returns None on failure."""
         if not self.is_available:
-            return False
+            return None
         try:
             chunks = self._client.text_to_speech.convert(
                 self._voice_id,
@@ -67,8 +67,15 @@ class SpeechSynthesizer:
                 output_format=OUTPUT_FORMAT,
                 voice_settings=self._voice_settings,
             )
-            out_path.write_bytes(b"".join(chunks))
-            return True
+            return b"".join(chunks)
         except Exception:
             logger.exception("Speech synthesis failed for text: %r", text)
+            return None
+
+    def synthesize_to_file(self, text: str, out_path: Path) -> bool:
+        """Synthesize text to an audio file. Returns False (and logs) on failure."""
+        audio_bytes = self.synthesize(text)
+        if audio_bytes is None:
             return False
+        out_path.write_bytes(audio_bytes)
+        return True

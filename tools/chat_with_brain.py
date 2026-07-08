@@ -45,11 +45,12 @@ def main() -> None:
         if not user_text or user_text.lower() in {"quit", "exit"}:
             break
 
-        reply = brain.reply(user_text)
-        if reply is None:
+        reply_sentences = list(brain.reply_stream(user_text))
+        if not reply_sentences:
             print("(homegirl didn't respond - check the API key/network)")
             continue
 
+        reply = " ".join(reply_sentences)
         print(f"homegirl> {reply}")
         if speech.synthesize_to_file(reply, settings.greeting_cache_path):
             audio.play(settings.greeting_cache_path)

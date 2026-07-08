@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections.abc import Iterator
 
 import anthropic
 
@@ -10,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 MODEL = "claude-sonnet-5"
 MAX_TOKENS = 1024
+
+# Splits on the whitespace that follows sentence-ending punctuation, so each
+# yielded piece is a complete sentence ready to hand to text-to-speech.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
 
 SYSTEM_PROMPT_TEMPLATE = """You are Homegirl, a warm home companion who lives in an ambient \
 wall display in {user_name}'s home.
@@ -41,23 +47,40 @@ class Brain:
         """Return whether an API key was configured."""
         return self._client is not None
 
-    def reply(self, user_text: str) -> str | None:
-        """Send a user turn and return Homegirl's reply, or None on failure."""
+    def reply_stream(self, user_text: str) -> Iterator[str]:
+        """Send a user turn and yield Homegirl's reply one sentence at a time.
+
+        Yields nothing if the brain is unavailable or the request fails.
+        Sentence-sized chunks let a caller start synthesizing and speaking
+        the start of the reply while Claude is still generating the rest,
+        instead of waiting for the full response before saying anything.
+        """
         if not self.is_available:
-            return None
+            return
         self._messages.append({"role": "user", "content": user_text})
+        full_text = ""
+        buffer = ""
+        failed = False
         try:
-            response = self._client.messages.create(
+            with self._client.messages.stream(
                 model=MODEL,
                 max_tokens=MAX_TOKENS,
                 system=self._system,
                 messages=self._messages,
                 thinking={"type": "disabled"},
-            )
+            ) as stream:
+                for delta in stream.text_stream:
+                    full_text += delta
+                    buffer += delta
+                    *complete, buffer = _SENTENCE_BREAK.split(buffer)
+                    yield from complete
+            if buffer.strip():
+                yield buffer
         except Exception:
             logger.exception("Claude API call failed")
-            self._messages.pop()
-            return None
-        reply_text = next((block.text for block in response.content if block.type == "text"), "")
-        self._messages.append({"role": "assistant", "content": reply_text})
-        return reply_text
+            failed = True
+        finally:
+            if failed or not full_text:
+                self._messages.pop()
+            else:
+                self._messages.append({"role": "assistant", "content": full_text})

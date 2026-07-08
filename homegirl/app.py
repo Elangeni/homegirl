@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
 from datetime import date, datetime
 
 import pygame
@@ -239,14 +240,31 @@ class HomegirlApp:
             if not transcript:
                 return
 
-            reply = self._brain.reply(transcript)
-            if reply and self._speech.synthesize_to_file(reply, self._settings.reply_cache_path):
-                self._audio.warm_up()
-                self._audio.play(self._settings.reply_cache_path)
+            self._speak_reply(transcript)
         finally:
             if wake_controller.screen == Screen.LISTENING:
                 wake_controller.dismiss()
             self._conversation_lock.release()
+
+    def _speak_reply(self, transcript: str) -> None:
+        """Stream Claude's reply sentence by sentence into speech and play it.
+
+        Synthesizing and queuing each sentence as it completes lets playback
+        of an earlier sentence overlap with generation/synthesis of the
+        next, instead of waiting for the whole reply before saying anything.
+        """
+
+        def audio_chunks() -> Iterator[bytes]:
+            for sentence in self._brain.reply_stream(transcript):
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                chunk = self._speech.synthesize(sentence)
+                if chunk is not None:
+                    yield chunk
+
+        self._audio.warm_up()
+        self._audio.play_stream(audio_chunks())
 
     def _draw_screen(
         self,

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import io
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 
 import pygame
 from pygame._sdl2 import audio as sdl_audio
 
 logger = logging.getLogger(__name__)
+
+# Reserved so pygame's automatic channel allocation (used by one-shot sounds
+# like chimes and the greeting) never steals the channel `play_stream` uses.
+_VOICE_CHANNEL_INDEX = 0
 
 
 class AudioPlayer:
@@ -30,6 +36,7 @@ class AudioPlayer:
             if pygame.mixer.get_init() is not None:
                 pygame.mixer.quit()
             pygame.mixer.init(devicename=device_name)
+            pygame.mixer.set_reserved(_VOICE_CHANNEL_INDEX + 1)
             if device_match and device_name is None:
                 logger.warning("No audio device matched %r; using system default.", device_match)
             self.warm_up()
@@ -81,3 +88,30 @@ class AudioPlayer:
             pygame.mixer.Sound(str(path)).play()
         except pygame.error:
             logger.warning("Could not play sound: %s", path)
+
+    def play_stream(self, chunks: Iterable[bytes]) -> None:
+        """Play a sequence of complete audio buffers back-to-back, gaplessly.
+
+        Each item in ``chunks`` must be a whole, independently decodable
+        audio file's bytes (e.g. one synthesized sentence), not a raw partial
+        byte stream — pygame's mixer can't resume mid-file. Queuing each one
+        on a dedicated channel as it becomes available lets playback of an
+        earlier sentence overlap with synthesis of the next, rather than
+        waiting for an entire reply to be synthesized before any of it is
+        heard. Iterates ``chunks`` lazily, so a generator that synthesizes
+        on demand drives the pipelining.
+        """
+        if not self.is_available:
+            return
+        channel = pygame.mixer.Channel(_VOICE_CHANNEL_INDEX)
+        started = False
+        try:
+            for chunk in chunks:
+                sound = pygame.mixer.Sound(file=io.BytesIO(chunk))
+                if started:
+                    channel.queue(sound)
+                else:
+                    channel.play(sound)
+                    started = True
+        except pygame.error:
+            logger.warning("Could not play streamed audio.")
