@@ -726,7 +726,9 @@ class ListeningUI:
     def draw(self, surface: pygame.Surface, background: AmbientBackground, caption: str = "I'm listening...") -> None:
         """Draw the wallpaper wash, a breathing glow, and the listening caption, all centered."""
         self._ensure_fonts(surface)
-        background.draw_washed(surface, HOME_BACKGROUND_IMAGE, HOME_WASH_COLOR, HOME_WASH_TOP_ALPHA, HOME_WASH_BOTTOM_ALPHA)
+        background.draw_washed(
+            surface, HOME_BACKGROUND_IMAGE, HOME_WASH_COLOR, HOME_WASH_TOP_ALPHA, HOME_WASH_BOTTOM_ALPHA
+        )
 
         width, height = surface.get_size()
         glow_size = self._spacing(120)

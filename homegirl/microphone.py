@@ -150,9 +150,13 @@ class Microphone:
 
 def _to_wav_bytes(audio, sample_rate: int) -> bytes:
     buffer = io.BytesIO()
+    # pylint can't resolve wave.open()'s mode-based overload, so it infers
+    # Wave_read here instead of Wave_write; this is genuinely a Wave_write.
+    # pylint: disable=no-member
     with wave.open(buffer, "wb") as wav_file:
         wav_file.setnchannels(CHANNELS)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(audio.tobytes())
+    # pylint: enable=no-member
     return buffer.getvalue()

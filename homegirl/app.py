@@ -408,8 +408,10 @@ class HomegirlApp:
 
             # Everywhere else on the ambient screen starts a conversation —
             # tap-to-talk for now, a wake word later. Ignore the tap if one
-            # is already in flight rather than stacking recordings.
-            if self._conversation_lock.acquire(blocking=False):
+            # is already in flight rather than stacking recordings. Released
+            # in `_run_conversation` on the background thread it starts, not
+            # here, so a `with` block would defeat the point.
+            if self._conversation_lock.acquire(blocking=False):  # pylint: disable=consider-using-with
                 wake_controller.show_listening()
                 threading.Thread(
                     target=self._run_conversation,
